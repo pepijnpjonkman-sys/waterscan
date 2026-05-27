@@ -1,0 +1,2182 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WaterScan — Wateroverlast Detectie</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600&family=Syne:wght@400;700;800&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --bg: #0a0e1a; --bg2: #111827; --bg3: #1a2236;
+  --border: rgba(100,160,255,0.12); --border2: rgba(100,160,255,0.28);
+  --text: #e8edf8; --text2: #8b9cc4; --text3: #4a5a7a;
+  --accent: #3b82f6; --accent2: #60a5fa;
+  --red: #ef4444; --amber: #f59e0b; --green: #22c55e;
+}
+body { background: var(--bg); color: var(--text); font-family: 'Space Grotesk', sans-serif; min-height: 100vh; overflow-x: hidden; }
+body::before {
+  content: ''; position: fixed; inset: 0; pointer-events: none; z-index: 0;
+  background-image: linear-gradient(rgba(59,130,246,0.03) 1px,transparent 1px),linear-gradient(90deg,rgba(59,130,246,0.03) 1px,transparent 1px);
+  background-size: 40px 40px;
+}
+.container { max-width: 1300px; margin: 0 auto; padding: 0 24px; position: relative; z-index: 1; }
+header { padding: 28px 0 20px; border-bottom: 1px solid var(--border); }
+.header-inner { display: flex; align-items: center; justify-content: space-between; }
+.logo { display: flex; align-items: center; gap: 12px; }
+.logo-icon { width: 38px; height: 38px; background: linear-gradient(135deg,#1d4ed8,#0891b2); border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 18px; }
+.logo h1 { font-family: 'Syne',sans-serif; font-size: 20px; font-weight: 800; }
+.logo h1 span { color: var(--accent2); }
+.badge-pill { font-size: 11px; font-weight: 500; padding: 3px 10px; border-radius: 20px; background: rgba(59,130,246,0.1); border: 1px solid rgba(59,130,246,0.22); color: var(--accent2); text-transform: uppercase; letter-spacing: 0.5px; }
+main { padding: 36px 0 60px; }
+.section-label { font-size: 11px; font-weight: 500; text-transform: uppercase; letter-spacing: 1.4px; color: var(--text3); margin-bottom: 10px; }
+.drop-zone {
+  border: 1.5px dashed var(--border2); border-radius: 14px; padding: 40px;
+  text-align: center; cursor: pointer; transition: all 0.2s;
+  background: rgba(59,130,246,0.02); position: relative; margin-bottom: 28px;
+}
+.drop-zone:hover, .drop-zone.dragover { border-color: var(--accent); background: rgba(59,130,246,0.06); }
+.drop-zone input[type=file] { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%; }
+.drop-zone h3 { font-family: 'Syne',sans-serif; font-size: 16px; font-weight: 700; margin: 12px 0 6px; }
+.drop-zone p { color: var(--text2); font-size: 13px; }
+.drop-zone p span { color: var(--accent2); font-weight: 500; }
+.tuning-panel { background: var(--bg2); border: 1px solid var(--border); border-radius: 12px; padding: 16px 20px; margin-bottom: 24px; }
+.tuning-panel h4 { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 1.2px; color: var(--text3); margin-bottom: 14px; }
+.tuning-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px; }
+.tuning-item { display: flex; flex-direction: column; gap: 6px; }
+.tuning-item label { font-size: 12px; color: var(--text2); display: flex; justify-content: space-between; }
+.tuning-item label span { color: var(--accent2); font-weight: 600; }
+.tuning-item input[type=range] { width: 100%; accent-color: var(--accent); }
+.controls-row { display: flex; gap: 16px; align-items: flex-end; flex-wrap: wrap; margin-bottom: 32px; }
+.ctrl-group { display: flex; flex-direction: column; gap: 8px; }
+.method-toggles { display: flex; gap: 8px; flex-wrap: wrap; }
+.method-btn {
+  padding: 7px 16px; border-radius: 8px; border: 1px solid var(--border2);
+  background: var(--bg2); color: var(--text2); font-family: 'Space Grotesk',sans-serif;
+  font-size: 13px; font-weight: 500; cursor: pointer; transition: all 0.15s;
+  display: flex; align-items: center; gap: 6px;
+}
+.method-btn .dot { width: 7px; height: 7px; border-radius: 50%; }
+.method-btn[data-method="rgb"] .dot { background: #3b82f6; }
+.method-btn[data-method="hsv"] .dot { background: #14b8a6; }
+.method-btn[data-method="sam2"] .dot { background: #a855f7; }
+.method-btn[data-method="hsv-sam2"] .dot { background: #f59e0b; }
+.method-btn[data-method="rgb"].active { background: rgba(59,130,246,0.18); border-color: rgba(59,130,246,0.4); color: #93c5fd; }
+.method-btn[data-method="hsv"].active { background: rgba(20,184,166,0.18); border-color: rgba(20,184,166,0.4); color: #5eead4; }
+.method-btn[data-method="sam2"].active { background: rgba(168,85,247,0.18); border-color: rgba(168,85,247,0.4); color: #d8b4fe; }
+.method-btn[data-method="hsv-sam2"].active { background: rgba(245,158,11,0.18); border-color: rgba(245,158,11,0.4); color: #fcd34d; }
+.slider-row { display: flex; align-items: center; gap: 10px; }
+.slider-row label { font-size: 12px; color: var(--text2); white-space: nowrap; }
+.slider-row input[type=range] { width: 110px; accent-color: var(--accent); }
+.slider-row .val { font-size: 12px; font-weight: 600; color: var(--accent2); min-width: 28px; }
+.scan-btn {
+  padding: 10px 28px; border-radius: 10px; border: none;
+  background: linear-gradient(135deg,#1d4ed8,#0891b2); color: white;
+  font-family: 'Space Grotesk',sans-serif; font-size: 14px; font-weight: 600;
+  cursor: pointer; transition: all 0.2s; display: flex; align-items: center; gap: 8px; align-self: flex-end;
+}
+.scan-btn:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 8px 24px rgba(29,78,216,0.35); }
+.scan-btn:disabled { opacity: 0.35; cursor: not-allowed; transform: none; }
+.results-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 20px; }
+.result-card { background: var(--bg2); border: 1px solid var(--border); border-radius: 16px; overflow: hidden; transition: border-color 0.2s; }
+.result-card:hover { border-color: var(--border2); }
+.card-header { padding: 12px 16px; display: flex; align-items: center; gap: 10px; border-bottom: 1px solid var(--border); }
+.card-method-badge { font-size: 10px; font-weight: 600; padding: 3px 9px; border-radius: 5px; text-transform: uppercase; letter-spacing: 0.8px; }
+.badge-rgb { background: rgba(59,130,246,0.15); color: #93c5fd; }
+.badge-hsv { background: rgba(20,184,166,0.15); color: #5eead4; }
+.badge-sam2 { background: rgba(168,85,247,0.15); color: #d8b4fe; }
+.badge-hsvsam2 { background: rgba(245,158,11,0.15); color: #fcd34d; }
+.badge-original { background: rgba(100,116,139,0.15); color: #94a3b8; }
+.card-title { font-size: 12px; font-weight: 500; color: var(--text2); flex: 1; }
+.dl-btn {
+  font-size: 11px; padding: 4px 10px; border-radius: 6px; border: 1px solid var(--border2);
+  background: transparent; color: var(--text2); cursor: pointer; font-family: 'Space Grotesk',sans-serif;
+  display: flex; align-items: center; gap: 4px; transition: all 0.15s;
+}
+.dl-btn:hover:not(:disabled) { background: var(--bg3); color: var(--text); }
+.dl-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+.dl-btn-rgb:hover:not(:disabled) { border-color: rgba(59,130,246,0.5); color: #93c5fd; }
+.dl-btn-hsv:hover:not(:disabled) { border-color: rgba(20,184,166,0.5); color: #5eead4; }
+.dl-btn-sam2:hover:not(:disabled) { border-color: rgba(168,85,247,0.5); color: #d8b4fe; }
+.dl-btn-hsv-sam2:hover:not(:disabled) { border-color: rgba(245,158,11,0.5); color: #fcd34d; }
+.canvas-wrap { position: relative; width: 100%; aspect-ratio: 16/10; background: #060a14; overflow: hidden; }
+.canvas-wrap canvas, .canvas-wrap img { width: 100%; height: 100%; object-fit: contain; display: block; }
+.canvas-wrap.interactive { cursor: crosshair; }
+.hsv-sam2-hint {
+  position: absolute; bottom: 8px; left: 50%; transform: translateX(-50%);
+  background: rgba(10,14,26,0.75); border: 1px solid rgba(245,158,11,0.35);
+  border-radius: 20px; padding: 4px 12px; font-size: 11px; color: #fcd34d;
+  pointer-events: none; white-space: nowrap; z-index: 5;
+}
+.hsv-sam2-point-badge {
+  position: absolute; top: 8px; right: 8px;
+  background: rgba(245,158,11,0.18); border: 1px solid rgba(245,158,11,0.4);
+  border-radius: 6px; padding: 3px 8px; font-size: 11px; color: #fcd34d;
+  z-index: 5; pointer-events: none;
+}
+.card-footer { padding: 10px 16px; display: flex; gap: 20px; flex-wrap: wrap; }
+.stat { display: flex; flex-direction: column; gap: 2px; }
+.stat-label { font-size: 10px; text-transform: uppercase; letter-spacing: 1px; color: var(--text3); }
+.stat-value { font-size: 15px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.stat-value.danger { color: var(--red); }
+.stat-value.warn { color: var(--amber); }
+.stat-value.ok { color: var(--green); }
+.legend { display: flex; gap: 14px; flex-wrap: wrap; padding: 8px 16px; border-top: 1px solid var(--border); font-size: 11px; color: var(--text2); }
+.legend-item { display: flex; align-items: center; gap: 5px; }
+.legend-dot { width: 10px; height: 10px; border-radius: 2px; }
+.loading-overlay {
+  position: absolute; inset: 0; background: rgba(10,14,26,0.82);
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; z-index: 10;
+}
+.spinner { width: 28px; height: 28px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.loading-text { font-size: 12px; color: var(--text2); font-weight: 500; }
+.analysis-panel { background: var(--bg2); border: 1px solid var(--border); border-radius: 14px; padding: 20px 22px; margin-top: 22px; }
+.analysis-panel h3 { font-family: 'Syne',sans-serif; font-size: 14px; font-weight: 700; margin-bottom: 12px; }
+.analysis-text { font-size: 13px; line-height: 1.75; color: var(--text2); white-space: pre-wrap; }
+.empty-state { text-align: center; padding: 80px 40px; color: var(--text3); }
+.empty-state .big-icon { font-size: 56px; opacity: 0.3; margin-bottom: 14px; }
+.empty-state p { font-size: 14px; }
+
+/* ── RGB Sampler modal ─────────────────────────────────────────────────── */
+.sampler-backdrop {
+  position: fixed; inset: 0; background: rgba(5,8,18,0.88);
+  z-index: 100; display: flex; align-items: center; justify-content: center;
+  backdrop-filter: blur(4px);
+}
+.sampler-modal {
+  background: var(--bg2); border: 1px solid var(--border2);
+  border-radius: 18px; width: min(92vw, 960px); max-height: 90vh;
+  display: flex; flex-direction: column; overflow: hidden;
+  box-shadow: 0 32px 80px rgba(0,0,0,0.6);
+}
+.sampler-header {
+  padding: 16px 20px; border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; gap: 12px; flex-shrink: 0;
+}
+.sampler-header h3 { font-family: 'Syne',sans-serif; font-size: 15px; font-weight: 700; flex: 1; }
+.sampler-header p { font-size: 12px; color: var(--text2); margin-top: 2px; }
+.sampler-body {
+  display: flex; flex: 1; overflow: hidden; min-height: 0;
+}
+.sampler-canvas-wrap {
+  flex: 1; position: relative; overflow: auto; background: #060a14;
+  cursor: crosshair; min-height: 300px;
+}
+.sampler-canvas-wrap canvas { display: block; }
+.sampler-sidebar {
+  width: 220px; flex-shrink: 0; border-left: 1px solid var(--border);
+  padding: 16px; display: flex; flex-direction: column; gap: 14px; overflow-y: auto;
+}
+.sampler-sidebar h4 { font-size: 11px; text-transform: uppercase; letter-spacing: 1.2px; color: var(--text3); }
+.sample-list { display: flex; flex-direction: column; gap: 6px; min-height: 40px; }
+.sample-chip {
+  display: flex; align-items: center; gap: 8px; padding: 6px 8px;
+  background: var(--bg3); border-radius: 7px; font-size: 11px;
+  color: var(--text2); border: 1px solid var(--border);
+}
+.sample-swatch { width: 20px; height: 20px; border-radius: 4px; flex-shrink: 0; border: 1px solid rgba(255,255,255,0.1); }
+.sample-remove { margin-left: auto; cursor: pointer; color: var(--text3); font-size: 13px; line-height: 1; }
+.sample-remove:hover { color: var(--red); }
+.hsv-range-box {
+  background: var(--bg3); border: 1px solid var(--border); border-radius: 8px;
+  padding: 10px 12px; font-size: 11px; color: var(--text2); line-height: 1.9;
+}
+.hsv-range-box strong { color: var(--accent2); font-size: 10px; text-transform: uppercase; letter-spacing: 0.8px; display: block; margin-bottom: 4px; }
+.hsv-row { display: flex; justify-content: space-between; }
+.hsv-bar { height: 4px; border-radius: 2px; margin: 3px 0 6px; }
+.margin-row { display: flex; flex-direction: column; gap: 6px; }
+.margin-row label { font-size: 11px; color: var(--text2); display: flex; justify-content: space-between; }
+.margin-row label span { color: var(--accent2); font-weight: 600; }
+.margin-row input[type=range] { width: 100%; accent-color: var(--accent); }
+.sampler-footer {
+  padding: 12px 20px; border-top: 1px solid var(--border);
+  display: flex; align-items: center; gap: 10px; flex-shrink: 0;
+}
+.sampler-footer p { font-size: 12px; color: var(--text3); flex: 1; }
+.btn-ghost {
+  padding: 8px 18px; border-radius: 8px; border: 1px solid var(--border2);
+  background: transparent; color: var(--text2); font-family: 'Space Grotesk',sans-serif;
+  font-size: 13px; font-weight: 500; cursor: pointer; transition: all 0.15s;
+}
+.btn-ghost:hover { background: var(--bg3); color: var(--text); }
+.btn-primary {
+  padding: 8px 20px; border-radius: 8px; border: none;
+  background: linear-gradient(135deg,#1d4ed8,#0891b2); color: white;
+  font-family: 'Space Grotesk',sans-serif; font-size: 13px; font-weight: 600;
+  cursor: pointer; transition: all 0.15s;
+}
+.btn-primary:hover { opacity: 0.9; }
+.btn-primary:disabled { opacity: 0.3; cursor: not-allowed; }
+.crosshair-dot {
+  position: absolute; width: 14px; height: 14px; border-radius: 50%;
+  border: 2px solid white; transform: translate(-50%,-50%);
+  pointer-events: none; z-index: 5; box-shadow: 0 0 4px rgba(0,0,0,0.8);
+}
+.zoom-hint { font-size: 11px; color: var(--text3); text-align: center; padding: 6px; }
+</style>
+</head>
+<body>
+<header>
+  <div class="container">
+    <div class="header-inner">
+      <div class="logo">
+        <div class="logo-icon">🌊</div>
+        <h1>Water<span>Scan</span></h1>
+      </div>
+      <div style="display:flex;align-items:center;gap:10px">
+        <button onclick="document.getElementById('guideModal').style.display='flex'"
+          style="padding:6px 14px;border-radius:8px;border:1px solid var(--border2);background:transparent;color:var(--text2);font-family:'Space Grotesk',sans-serif;font-size:12px;font-weight:500;cursor:pointer;display:flex;align-items:center;gap:6px;transition:all 0.15s"
+          onmouseover="this.style.background='var(--bg3)';this.style.color='var(--text)'"
+          onmouseout="this.style.background='transparent';this.style.color='var(--text2)'">
+          📖 Handleiding
+        </button>
+        <div class="badge-pill">Drone · Neerslag Detectie</div>
+        <div style="font-size:11px;color:var(--text3)">RGB · HSV · AI Scan · Segmenteren</div>
+      </div>
+    </div>
+  </div>
+</header>
+
+<main>
+<div class="container">
+
+  <div class="section-label">Stap 1 — Drone/satellietafbeelding laden</div>
+  <input type="file" id="fileInput" accept="image/*" style="display:none">
+  <div class="drop-zone" id="dropZone" onclick="document.getElementById('fileInput').click()">
+    <div style="font-size:40px;opacity:0.4">🛰️</div>
+    <h3>Sleep een drone-opname hierheen</h3>
+    <p>of <span>klik om te bladeren</span> — JPG, PNG, WebP</p>
+    <p style="margin-top:6px;font-size:12px;color:var(--text3)">Geoptimaliseerd voor donker modderig neerslagwater</p>
+  </div>
+
+  <div class="tuning-panel" id="tuningPanel" style="display:none">
+    <h4>Detectie-parameters</h4>
+    <div class="tuning-grid">
+      <div class="tuning-item">
+        <label>Max helderheid water (V) <span id="vMaxVal">65</span></label>
+        <input type="range" id="vMax" min="20" max="130" value="65">
+      </div>
+      <div class="tuning-item">
+        <label>Max verzadiging (S) <span id="sMaxVal">60</span></label>
+        <input type="range" id="sMax" min="5" max="100" value="60">
+      </div>
+      <div class="tuning-item">
+        <label>Max helderheid totaal <span id="brightMaxVal">130</span></label>
+        <input type="range" id="brightMax" min="60" max="200" value="130">
+      </div>
+      <div class="tuning-item">
+        <label>Overlay dekking <span id="alphaVal">72%</span></label>
+        <input type="range" id="alphaSlider" min="30" max="100" value="72">
+      </div>
+    </div>
+  </div>
+
+  <!-- SAM3 callout: sleutel zit in Cloudflare Worker, geen invoer nodig -->
+  <div id="sam2Callout" style="display:none;background:rgba(168,85,247,0.07);border:1px solid rgba(168,85,247,0.25);border-radius:10px;padding:12px 16px;margin-bottom:16px;align-items:center;gap:12px;flex-wrap:wrap;">
+    <span style="font-size:18px">🤖</span>
+    <div style="flex:1;min-width:220px">
+      <div style="font-size:12px;font-weight:600;color:#d8b4fe;margin-bottom:2px">Artificial Intelligence Scan — Meta SAM3 via Roboflow (automatisch)</div>
+      <div style="font-size:11px;color:var(--text2)">SAM3 detecteert automatisch watergebieden via tekst-prompts. Werkt direct zonder extra instellingen.</div>
+    </div>
+    <span id="rfKeyStatus" style="font-size:11px;color:var(--text3)"></span>
+  </div>
+
+  <!-- HSV-SAM3 callout: gebruikt RGB/HSV klikpunten + proxy URL -->
+  <div id="hsvSam2Callout" style="display:none;background:rgba(245,158,11,0.07);border:1px solid rgba(245,158,11,0.25);border-radius:10px;padding:12px 16px;margin-bottom:16px;align-items:center;gap:12px;flex-wrap:wrap;">
+    <span style="font-size:18px">🔬</span>
+    <div style="flex:1;min-width:220px">
+      <div style="font-size:12px;font-weight:600;color:#fcd34d;margin-bottom:2px">Segmenteren n.a.v. punten — HSV masker verfijnd door AI proxy</div>
+      <div style="font-size:11px;color:var(--text2)" id="hsvSam2Status">Vul de proxy-URL in. Gebruikt de RGB/HSV klikpunten als SAM3 point prompts.</div>
+    </div>
+    <input type="text" id="sam2ProxyUrl" placeholder="https://jouw-naam-waterscan-sam2.hf.space"
+      value="https://Pepijn071-waterscan-sam2.hf.space"
+      style="padding:6px 10px;border-radius:7px;border:1px solid rgba(245,158,11,0.35);background:var(--bg3);color:var(--text);font-size:11px;font-family:'Space Grotesk',sans-serif;width:280px;outline:none;">
+  </div>
+
+  <!-- RGB sampler callout -->
+  <div id="rgbSamplerCallout" style="display:none;background:rgba(59,130,246,0.07);border:1px solid rgba(59,130,246,0.25);border-radius:10px;padding:12px 16px;margin-bottom:16px;align-items:center;gap:12px;flex-wrap:wrap;">
+    <span style="font-size:18px">🎯</span>
+    <div style="flex:1;min-width:180px">
+      <div style="font-size:12px;font-weight:600;color:#93c5fd;margin-bottom:2px">RGB &amp; HSV — Klik waterpixels aan</div>
+      <div style="font-size:11px;color:var(--text2)" id="samplerStatus">Nog geen pixels geselecteerd — klik op de knop om te starten</div>
+    </div>
+    <button class="btn-primary" id="openSamplerBtn" style="font-size:12px;padding:7px 16px" onclick="openSampler()">📍 Selecteer waterpixels</button>
+    <button class="btn-ghost" id="clearSamplerBtn" style="font-size:12px;padding:7px 14px;display:none" onclick="clearSamples()">✕ Wis selectie</button>
+  </div>
+
+  <div class="controls-row">
+    <div class="ctrl-group">
+      <div class="section-label" style="margin-bottom:0">Methoden</div>
+      <div class="method-toggles">
+        <button class="method-btn active" data-method="rgb"><span class="dot"></span>RGB</button>
+        <button class="method-btn active" data-method="hsv"><span class="dot"></span>HSV</button>
+        <button class="method-btn active" data-method="sam2"><span class="dot"></span>AI Scan</button>
+        <button class="method-btn active" data-method="hsv-sam2"><span class="dot"></span>Segmenteren</button>
+      </div>
+    </div>
+    <div class="ctrl-group">
+      <div class="section-label" style="margin-bottom:0">Gevoeligheid</div>
+      <div class="slider-row">
+        <label>Streng</label>
+        <input type="range" id="sensitivity" min="1" max="5" value="3" step="1">
+        <span class="val" id="sensVal">3</span>
+        <label>Ruim</label>
+      </div>
+    </div>
+    <button class="scan-btn" id="scanBtn" disabled>
+      <span id="scanIcon">🔍</span><span id="scanLabel">Analyseer</span>
+    </button>
+  </div>
+
+  <div id="resultsArea">
+    <div class="empty-state">
+      <div class="big-icon">🛰️</div>
+      <p>Laad een drone-opname om wateroverlast te detecteren</p>
+    </div>
+  </div>
+
+</div>
+</main>
+
+<!-- RGB Sampler Modal -->
+<div class="sampler-backdrop" id="samplerBackdrop" style="display:none">
+
+<!-- SAM3 Point Sampler Modal -->
+<div class="sampler-backdrop" id="sam2SamplerBackdrop" style="display:none">
+  <div class="sampler-modal">
+    <div class="sampler-header">
+      <div style="font-size:20px">🤖</div>
+      <div style="flex:1">
+        <h3>Segmenteren n.a.v. punten — klik waterpunten aan</h3>
+        <p>Klik op het water in de afbeelding. AI segmenteert automatisch de regio's rondom die punten. Meer punten = betere dekking.</p>
+      </div>
+    </div>
+    <div class="sampler-body">
+      <div class="sampler-canvas-wrap" id="sam2CanvasWrap">
+        <canvas id="sam2SamplerCanvas"></canvas>
+      </div>
+      <div class="sampler-sidebar">
+        <div>
+          <h4 style="margin-bottom:8px">Aangeklikte punten</h4>
+          <div class="sample-list" id="sam2PointList">
+            <div style="font-size:11px;color:var(--text3);text-align:center;padding:8px">Klik op watergebieden</div>
+          </div>
+        </div>
+        <div style="font-size:11px;color:var(--text2);line-height:1.6;padding:8px;background:var(--bg3);border-radius:8px;border:1px solid var(--border)">
+          <strong style="color:#d8b4fe;display:block;margin-bottom:4px">Hoe werkt het?</strong>
+          Elke klik wordt als SAM3 <em>point prompt</em> gestuurd. SAM3 begrijpt wat een "regio" is en breidt het masker uit naar de volledige aaneengesloten waterzone — ook als je maar één punt in de waterloop klikt.
+        </div>
+        <div class="zoom-hint">Scroll om in te zoomen · Klik om punt toe te voegen · Rechts-klik om te verwijderen</div>
+      </div>
+    </div>
+    <div class="sampler-footer">
+      <p id="sam2SamplerMsg">Klik op watergebieden in de afbeelding.</p>
+      <button class="btn-ghost" onclick="closeSam2Sampler(false)">Annuleren</button>
+      <button class="btn-primary" id="confirmSam2Btn" disabled onclick="closeSam2Sampler(true)" style="background:linear-gradient(135deg,#6d28d9,#7c3aed)">✓ Bevestigen</button>
+    </div>
+  </div>
+</div>
+  <div class="sampler-modal">
+    <div class="sampler-header">
+      <div style="font-size:20px">🎯</div>
+      <div style="flex:1">
+        <h3>RGB Waterpixels selecteren</h3>
+        <p>Klik op watergebieden in de afbeelding. Elke klik meet de HSV-waarden op dat punt. Druk op "Bevestigen" als je klaar bent.</p>
+      </div>
+    </div>
+    <div class="sampler-body">
+      <div class="sampler-canvas-wrap" id="samplerCanvasWrap">
+        <canvas id="samplerCanvas"></canvas>
+      </div>
+      <div class="sampler-sidebar">
+        <div>
+          <h4 style="margin-bottom:8px">Geselecteerde punten</h4>
+          <div class="sample-list" id="sampleList">
+            <div style="font-size:11px;color:var(--text3);text-align:center;padding:8px">Klik op water in de afbeelding</div>
+          </div>
+        </div>
+        <div>
+          <h4 style="margin-bottom:8px">Berekende HSV-range</h4>
+          <div class="hsv-range-box" id="hsvRangeBox">
+            <span style="color:var(--text3);font-size:11px">Selecteer eerst waterpixels</span>
+          </div>
+        </div>
+        <div class="margin-row">
+          <h4>Marges (zoals Python ±)</h4>
+          <label>H marge <span id="hMargeVal">10</span></label>
+          <input type="range" id="hMarge" min="0" max="30" value="10">
+          <label>S marge <span id="sMargeVal">30</span></label>
+          <input type="range" id="sMarge" min="0" max="60" value="30">
+          <label>V marge <span id="vMargeVal">30</span></label>
+          <input type="range" id="vMarge" min="0" max="60" value="30">
+        </div>
+        <div class="zoom-hint">Scroll om in te zoomen · Klik om te meten</div>
+      </div>
+    </div>
+    <div class="sampler-footer">
+      <p id="samplerFooterMsg">Klik op waterpixels in de afbeelding om te beginnen.</p>
+      <button class="btn-ghost" onclick="closeSampler(false)">Annuleren</button>
+      <button class="btn-primary" id="confirmSamplerBtn" disabled onclick="closeSampler(true)">✓ Bevestigen</button>
+    </div>
+  </div>
+</div>
+
+<script>
+let uploadedDataURL = null;
+const activeMethods = new Set(['rgb','hsv','sam2','hsv-sam2']);
+
+const dropZone    = document.getElementById('dropZone');
+const fileInput   = document.getElementById('fileInput');
+const scanBtn     = document.getElementById('scanBtn');
+const sensSlider  = document.getElementById('sensitivity');
+const resultsArea = document.getElementById('resultsArea');
+
+function bindSlider(id, dispId, suffix) {
+  const el = document.getElementById(id);
+  el.addEventListener('input', () => { document.getElementById(dispId).textContent = el.value + (suffix||''); });
+}
+bindSlider('vMax','vMaxVal'); bindSlider('sMax','sMaxVal');
+bindSlider('brightMax','brightMaxVal'); bindSlider('alphaSlider','alphaVal','%');
+sensSlider.addEventListener('input', () => { document.getElementById('sensVal').textContent = sensSlider.value; });
+
+document.querySelectorAll('.method-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const m = btn.dataset.method;
+    if (activeMethods.has(m)) { activeMethods.delete(m); btn.classList.remove('active'); }
+    else { activeMethods.add(m); btn.classList.add('active'); }
+    if (m === 'rgb' || m === 'hsv' || m === 'hsv-sam2') updateSamplerCallout();
+    if (m === 'sam2') updateSAM2Callout();
+    if (m === 'hsv-sam2') updateHSVSAM2Callout();
+  });
+});
+
+function updateSAM2Callout() {
+  const el = document.getElementById('sam2Callout');
+  if (!el) return;
+  el.style.display = (uploadedDataURL && activeMethods.has('sam2')) ? 'flex' : 'none';
+}
+
+function updateHSVSAM2Callout() {
+  const el = document.getElementById('hsvSam2Callout');
+  if (!el) return;
+  el.style.display = (uploadedDataURL && activeMethods.has('hsv-sam2')) ? 'flex' : 'none';
+  // Update status to reflect whether RGB/HSV points are available
+  const statusEl = document.getElementById('hsvSam2Status');
+  if (!statusEl) return;
+  if (samplerSamples.length > 0) {
+    statusEl.textContent = `✓ ${samplerSamples.length} RGB/HSV punt${samplerSamples.length!==1?'en':''} beschikbaar als SAM3 prompts`;
+    statusEl.style.color = '#86efac';
+  } else {
+    statusEl.textContent = 'Selecteer eerst waterpixels via de RGB/HSV sampler (worden hergebruikt als SAM3 point prompts)';
+    statusEl.style.color = '';
+  }
+}
+
+dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('dragover'); });
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
+dropZone.addEventListener('drop', e => {
+  e.preventDefault(); dropZone.classList.remove('dragover');
+  const f = e.dataTransfer.files[0];
+  if (f && f.type.startsWith('image/')) loadImage(f);
+});
+fileInput.addEventListener('change', () => { if (fileInput.files[0]) loadImage(fileInput.files[0]); });
+
+function loadImage(file) {
+  const reader = new FileReader();
+  reader.onload = e => {
+    uploadedDataURL = e.target.result;
+    const dz = document.getElementById('dropZone');
+    dz.onclick = () => document.getElementById('fileInput').click();
+    dz.innerHTML = `
+      <img src="${uploadedDataURL}" style="max-height:110px;border-radius:8px;object-fit:contain;">
+      <p style="margin-top:10px;color:var(--text2);font-size:13px;">📁 ${file.name}</p>
+      <p style="color:var(--text3);font-size:12px;">Klik om te wisselen</p>`;
+    document.getElementById('tuningPanel').style.display = '';
+    updateSamplerCallout();
+    updateSAM2Callout();
+    updateHSVSAM2Callout();
+    scanBtn.disabled = false;
+  };
+  reader.readAsDataURL(file);
+}
+
+scanBtn.addEventListener('click', async () => {
+  if (!uploadedDataURL) return;
+  const methods = [...activeMethods];
+  if (!methods.length) { alert('Selecteer minimaal één methode.'); return; }
+
+  scanBtn.disabled = true;
+  document.getElementById('scanLabel').textContent = 'Bezig...';
+  document.getElementById('scanIcon').innerHTML = '<span class="spinner" style="width:14px;height:14px;display:inline-block;border-width:2px;"></span>';
+
+  const params = {
+    sensitivity: parseInt(sensSlider.value),
+    vMax:      parseInt(document.getElementById('vMax').value),
+    sMax:      parseInt(document.getElementById('sMax').value),
+    brightMax: parseInt(document.getElementById('brightMax').value),
+    alpha:     parseInt(document.getElementById('alphaSlider').value) / 100
+  };
+
+  resultsArea.innerHTML = buildGrid(methods);
+
+  // Run pixel methods and SAM2 in parallel
+  const promises = [];
+  if (methods.includes('rgb'))      promises.push(runMethod('rgb',  params));
+  if (methods.includes('hsv'))      promises.push(runMethod('hsv',  params));
+  if (methods.includes('sam2'))     promises.push(runSAM2_HF(params));
+  if (methods.includes('hsv-sam2')) promises.push(runHSVSAM2(params));
+  await Promise.all(promises);
+
+  await getAIAnalysis(methods, params);
+
+  scanBtn.disabled = false;
+  document.getElementById('scanLabel').textContent = 'Opnieuw analyseren';
+  document.getElementById('scanIcon').textContent = '🔍';
+});
+
+function buildGrid(methods) {
+  const meta = {
+    rgb:      { cls:'badge-rgb',      label:'RGB',      desc:'Kleurdrempel — donker neerslagwater' },
+    hsv:      { cls:'badge-hsv',      label:'HSV',      desc:'Tint-Verzadiging-Waarde filter' },
+    sam2:     { cls:'badge-sam2',     label:'SAM2',     desc:'Artificial Intelligence Scan' },
+    'hsv-sam2': { cls:'badge-hsvsam2', label:'HSV-SAM2', desc:'HSV masker verfijnd door SAM2 proxy' }
+  };
+  const colorMap = { rgb:'#3b82f6', hsv:'#14b8a6', sam2:'#a855f7', 'hsv-sam2':'#f59e0b' };
+  const orig = `<div class="result-card">
+    <div class="card-header"><span class="card-method-badge badge-original">Origineel</span><span class="card-title">Drone opname</span></div>
+    <div class="canvas-wrap"><img src="${uploadedDataURL}" alt="Origineel"></div>
+  </div>`;
+  const cards = methods.map(m => {
+    const { cls, label, desc } = meta[m] || { cls:'badge-original', label:m, desc:'' };
+    const col = colorMap[m] || '#888';
+
+    // HSV-SAM2 gets a special interactive card
+    if (m === 'hsv-sam2') {
+      return `<div class="result-card" id="card-hsv-sam2">
+        <div class="card-header">
+          <span class="card-method-badge badge-hsvsam2">Segmenteren</span>
+          <span class="card-title">Segmenteren n.a.v. punten</span>
+          <button class="dl-btn dl-btn-hsv-sam2" id="dl-hsv-sam2" disabled onclick="downloadResult('hsv-sam2')">⬇ PNG</button>
+        </div>
+        <div class="canvas-wrap interactive" id="wrap-hsv-sam2" style="aspect-ratio:unset;min-height:220px">
+          <canvas id="canvas-hsv-sam2" style="cursor:crosshair"></canvas>
+          <div class="loading-overlay" id="loading-hsv-sam2" style="display:none"><div class="spinner"></div><span class="loading-text">AI segmenteert...</span></div>
+          <div class="hsv-sam2-hint" id="hsv-sam2-hint">📍 Klik op een watergebied</div>
+          <div class="hsv-sam2-point-badge" id="hsv-sam2-badge" style="display:none"></div>
+        </div>
+        <div class="legend" style="justify-content:space-between;align-items:center">
+          <div style="display:flex;gap:14px;flex-wrap:wrap">
+            <span class="legend-item"><span class="legend-dot" style="background:#f59e0b"></span>AI segment</span>
+            <span class="legend-item"><span class="legend-dot" style="background:rgba(245,158,11,0.9);border-radius:50%"></span>Water punt (klik)</span>
+            <span class="legend-item"><span class="legend-dot" style="background:rgba(239,68,68,0.9);border-radius:50%"></span>Uitsluiting (Shift+klik)</span>
+          </div>
+          <button onclick="clearHsvSam2Points()" style="font-size:11px;padding:3px 10px;border-radius:6px;border:1px solid var(--border2);background:transparent;color:var(--text2);cursor:pointer">✕ Wis punten</button>
+        </div>
+        <div class="card-footer">
+          <div class="stat"><span class="stat-label">Waterdekking</span><span class="stat-value" id="coverage-hsv-sam2">—</span></div>
+          <div class="stat"><span class="stat-label">Wateroppervlak</span><span class="stat-value" id="pixels-hsv-sam2">—</span></div>
+          <div class="stat"><span class="stat-label">Risico</span><span class="stat-value" id="risk-hsv-sam2">—</span></div>
+        </div>
+      </div>`;
+    }
+
+    return `<div class="result-card" id="card-${m}">
+      <div class="card-header">
+        <span class="card-method-badge ${cls}">${label}</span>
+        <span class="card-title">${desc}</span>
+        <button class="dl-btn dl-btn-${m}" id="dl-${m}" disabled onclick="downloadResult('${m}')">⬇ PNG</button>
+      </div>
+      <div class="canvas-wrap" id="wrap-${m}">
+        <canvas id="canvas-${m}"></canvas>
+        <div class="loading-overlay" id="loading-${m}"><div class="spinner"></div><span class="loading-text">Analyseren...</span></div>
+      </div>
+      <div class="legend">
+        <span class="legend-item"><span class="legend-dot" style="background:${col}"></span>Wateroverlast</span>
+        <span class="legend-item"><span class="legend-dot" style="background:rgba(255,255,255,0.12)"></span>Droog gebied</span>
+      </div>
+      <div class="card-footer">
+        <div class="stat"><span class="stat-label">Waterdekking</span><span class="stat-value" id="coverage-${m}">—</span></div>
+        <div class="stat"><span class="stat-label">Wateroppervlak</span><span class="stat-value" id="pixels-${m}">—</span></div>
+        <div class="stat"><span class="stat-label">Risico</span><span class="stat-value" id="risk-${m}">—</span></div>
+      </div>
+    </div>`;
+  });
+  return `<div class="results-grid">${orig}${cards.join('')}</div><div id="aiPanel"></div>`;
+}
+
+function loadSrc() {
+  return new Promise(resolve => {
+    const img = new Image();
+    img.onload = () => {
+      const c = document.createElement('canvas');
+      c.width = img.naturalWidth; c.height = img.naturalHeight;
+      const ctx = c.getContext('2d');
+      ctx.drawImage(img, 0, 0);
+      resolve({ img, canvas: c, ctx, px: ctx.getImageData(0,0,c.width,c.height) });
+    };
+    img.src = uploadedDataURL;
+  });
+}
+
+function toHsv(r, g, b) {
+  r/=255; g/=255; b/=255;
+  const mx=Math.max(r,g,b), mn=Math.min(r,g,b), d=mx-mn;
+  let h=0, s=mx===0?0:d/mx, v=mx;
+  if(d>0){
+    if(mx===r) h=((g-b)/d+(g<b?6:0))/6;
+    else if(mx===g) h=((b-r)/d+2)/6;
+    else h=((r-g)/d+4)/6;
+  }
+  return [h*360, s*100, v*100];
+}
+
+// ── RGB Sampler state ────────────────────────────────────────────────────────
+let samplerSamples = [];   // [{x,y,r,g,b,h,s,v}]
+let sampledHSVRange = null; // {hLo,hHi,sLo,sHi,vLo,vHi} — null = use fallback
+let samplerImgData = null;  // raw pixel data of original image
+let samplerNatW = 0, samplerNatH = 0;
+let samplerScale = 1;
+
+function updateSamplerCallout() {
+  const callout = document.getElementById('rgbSamplerCallout');
+  if (!callout) return;
+  if (uploadedDataURL && (activeMethods.has('rgb') || activeMethods.has('hsv') || activeMethods.has('hsv-sam2'))) {
+    callout.style.display = 'flex';
+    updateSamplerStatus();
+  } else {
+    callout.style.display = 'none';
+  }
+}
+
+function updateSamplerStatus() {
+  const el = document.getElementById('samplerStatus');
+  const clrBtn = document.getElementById('clearSamplerBtn');
+  if (!el) return;
+  if (sampledHSVRange) {
+    const r = sampledHSVRange;
+    el.textContent = `✓ ${samplerSamples.length} punt${samplerSamples.length!==1?'en':''} geselecteerd — H:${r.hLo}–${r.hHi} S:${r.sLo}–${r.sHi} V:${r.vLo}–${r.vHi}`;
+    el.style.color = '#86efac';
+    if (clrBtn) clrBtn.style.display = '';
+  } else {
+    el.textContent = 'Nog geen pixels geselecteerd — klik op de knop om te starten';
+    el.style.color = '';
+    if (clrBtn) clrBtn.style.display = 'none';
+  }
+  updateHSVSAM2Callout(); // keep HSV-SAM2 status in sync
+}
+
+function clearSamples() {
+  samplerSamples = [];
+  sampledHSVRange = null;
+  updateSamplerStatus();
+}
+
+// ── Open sampler modal ──────────────────────────────────────────────────────
+function openSampler() {
+  const backdrop = document.getElementById('samplerBackdrop');
+  backdrop.style.display = 'flex';
+
+  // Render image on sampler canvas
+  const img = new Image();
+  img.onload = () => {
+    samplerNatW = img.naturalWidth;
+    samplerNatH = img.naturalHeight;
+    const wrap = document.getElementById('samplerCanvasWrap');
+    const maxW = wrap.clientWidth || 700;
+    const maxH = 480;
+    samplerScale = Math.min(maxW / samplerNatW, maxH / samplerNatH, 1);
+
+    const c = document.getElementById('samplerCanvas');
+    c.width  = Math.round(samplerNatW * samplerScale);
+    c.height = Math.round(samplerNatH * samplerScale);
+    const ctx = c.getContext('2d');
+    ctx.drawImage(img, 0, 0, c.width, c.height);
+
+    // Store raw pixel data at native resolution
+    const natC = document.createElement('canvas');
+    natC.width = samplerNatW; natC.height = samplerNatH;
+    natC.getContext('2d').drawImage(img, 0, 0);
+    samplerImgData = natC.getContext('2d').getImageData(0, 0, samplerNatW, samplerNatH);
+
+    // Redraw existing dots
+    redrawSamplerCanvas();
+  };
+  img.src = uploadedDataURL;
+
+  // Bind canvas click
+  const c = document.getElementById('samplerCanvas');
+  c.onclick = samplerCanvasClick;
+
+  // Bind margin sliders
+  ['hMarge','sMarge','vMarge'].forEach(id => {
+    document.getElementById(id).oninput = () => {
+      const v = document.getElementById(id).value;
+      document.getElementById(id+'Val').textContent = v;
+      recalcHSVRange();
+    };
+  });
+
+  // Restore previous samples
+  renderSampleList();
+  recalcHSVRange();
+  updateConfirmBtn();
+}
+
+function closeSampler(confirm) {
+  document.getElementById('samplerBackdrop').style.display = 'none';
+  if (confirm && samplerSamples.length > 0) {
+    recalcHSVRange();
+  } else if (!confirm) {
+    // cancelled — keep existing state
+  }
+  updateSamplerCallout();
+}
+
+function samplerCanvasClick(e) {
+  const c = document.getElementById('samplerCanvas');
+  const rect = c.getBoundingClientRect();
+  // Canvas display size vs internal size ratio
+  const scaleX = c.width / rect.width;
+  const scaleY = c.height / rect.height;
+  const cx = (e.clientX - rect.left) * scaleX;
+  const cy = (e.clientY - rect.top)  * scaleY;
+
+  // Map to native image coords
+  const nx = Math.round(cx / samplerScale);
+  const ny = Math.round(cy / samplerScale);
+  if (nx < 0 || nx >= samplerNatW || ny < 0 || ny >= samplerNatH) return;
+
+  const idx = (ny * samplerNatW + nx) * 4;
+  const r = samplerImgData.data[idx];
+  const g = samplerImgData.data[idx+1];
+  const b = samplerImgData.data[idx+2];
+  const [h, s, v] = toHsvOpenCV(r, g, b); // OpenCV scale: H 0-179, S 0-255, V 0-255
+
+  samplerSamples.push({ cx, cy, r, g, b, h, s, v });
+  redrawSamplerCanvas();
+  renderSampleList();
+  recalcHSVRange();
+  updateConfirmBtn();
+}
+
+// Convert RGB to OpenCV HSV scale (H:0-179, S:0-255, V:0-255) — matches Python cv2
+function toHsvOpenCV(r, g, b) {
+  r/=255; g/=255; b/=255;
+  const mx=Math.max(r,g,b), mn=Math.min(r,g,b), d=mx-mn;
+  let h=0, s=mx===0?0:d/mx, v=mx;
+  if(d>0){
+    if(mx===r) h=((g-b)/d+(g<b?6:0))/6;
+    else if(mx===g) h=((b-r)/d+2)/6;
+    else h=((r-g)/d+4)/6;
+  }
+  return [Math.round(h*179), Math.round(s*255), Math.round(v*255)];
+}
+
+function redrawSamplerCanvas() {
+  const c = document.getElementById('samplerCanvas');
+  const ctx = c.getContext('2d');
+  // Redraw image
+  const img = new Image();
+  img.onload = () => {
+    ctx.drawImage(img, 0, 0, c.width, c.height);
+    // Draw dots
+    samplerSamples.forEach((s, i) => {
+      ctx.beginPath();
+      ctx.arc(s.cx, s.cy, 7, 0, Math.PI*2);
+      ctx.fillStyle = `rgba(${s.r},${s.g},${s.b},0.9)`;
+      ctx.fill();
+      ctx.strokeStyle = 'white';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+      // Number
+      ctx.fillStyle = 'white';
+      ctx.font = 'bold 9px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(i+1, s.cx, s.cy);
+    });
+  };
+  img.src = uploadedDataURL;
+}
+
+function renderSampleList() {
+  const list = document.getElementById('sampleList');
+  if (!samplerSamples.length) {
+    list.innerHTML = '<div style="font-size:11px;color:var(--text3);text-align:center;padding:8px">Klik op water in de afbeelding</div>';
+    return;
+  }
+  list.innerHTML = samplerSamples.map((s, i) => `
+    <div class="sample-chip">
+      <div class="sample-swatch" style="background:rgb(${s.r},${s.g},${s.b})"></div>
+      <span>#${i+1} &nbsp;H:${s.h} S:${s.s} V:${s.v}</span>
+      <span class="sample-remove" onclick="removeSample(${i})">×</span>
+    </div>`).join('');
+}
+
+function removeSample(idx) {
+  samplerSamples.splice(idx, 1);
+  redrawSamplerCanvas();
+  renderSampleList();
+  recalcHSVRange();
+  updateConfirmBtn();
+}
+
+function recalcHSVRange() {
+  if (!samplerSamples.length) {
+    sampledHSVRange = null;
+    document.getElementById('hsvRangeBox').innerHTML = '<span style="color:var(--text3);font-size:11px">Selecteer eerst waterpixels</span>';
+    return;
+  }
+  const hm = parseInt(document.getElementById('hMarge').value);
+  const sm = parseInt(document.getElementById('sMarge').value);
+  const vm = parseInt(document.getElementById('vMarge').value);
+
+  const hs = samplerSamples.map(s=>s.h);
+  const ss = samplerSamples.map(s=>s.s);
+  const vs = samplerSamples.map(s=>s.v);
+  const rs = samplerSamples.map(s=>s.r);
+  const gs = samplerSamples.map(s=>s.g);
+  const bs = samplerSamples.map(s=>s.b);
+
+  // HSV range (OpenCV scale, used by HSV method)
+  const hLo = Math.max(0,   Math.min(...hs) - hm);
+  const hHi = Math.min(179, Math.max(...hs) + hm);
+  const sLo = Math.max(0,   Math.min(...ss) - sm);
+  const sHi = Math.min(255, Math.max(...ss) + sm);
+  const vLo = Math.max(0,   Math.min(...vs) - vm);
+  const vHi = Math.min(255, Math.max(...vs) + vm);
+
+  // RGB range (0-255, used by RGB method) — margins scaled to 0-255 space
+  const rmRGB = Math.round(vm * 0.85); // reuse vm as RGB margin (same perceptual scale)
+  const rLo = Math.max(0,   Math.min(...rs) - rmRGB);
+  const rHi = Math.min(255, Math.max(...rs) + rmRGB);
+  const gLo = Math.max(0,   Math.min(...gs) - rmRGB);
+  const gHi = Math.min(255, Math.max(...gs) + rmRGB);
+  const bLo = Math.max(0,   Math.min(...bs) - rmRGB);
+  const bHi = Math.min(255, Math.max(...bs) + rmRGB);
+
+  sampledHSVRange = { hLo, hHi, sLo, sHi, vLo, vHi, rLo, rHi, gLo, gHi, bLo, bHi };
+
+  // Visualise both ranges
+  document.getElementById('hsvRangeBox').innerHTML = `
+    <strong>HSV-range (HSV methode)</strong>
+    <div class="hsv-row"><span style="color:#f97316">H</span><span>${hLo} → ${hHi}</span></div>
+    <div class="hsv-bar" style="background:linear-gradient(90deg,hsl(${hLo*2},80%,45%),hsl(${hHi*2},80%,45%))"></div>
+    <div class="hsv-row"><span style="color:#a78bfa">S</span><span>${sLo} → ${sHi}</span></div>
+    <div class="hsv-bar" style="background:linear-gradient(90deg,rgba(100,100,200,0.3),rgba(100,100,200,0.9))"></div>
+    <div class="hsv-row"><span style="color:#fbbf24">V</span><span>${vLo} → ${vHi}</span></div>
+    <div class="hsv-bar" style="background:linear-gradient(90deg,#111,#eee)"></div>
+    <strong style="margin-top:8px">RGB-range (RGB methode)</strong>
+    <div class="hsv-row"><span style="color:#f87171">R</span><span>${rLo} → ${rHi}</span></div>
+    <div class="hsv-bar" style="background:linear-gradient(90deg,rgb(${rLo},0,0),rgb(${rHi},0,0))"></div>
+    <div class="hsv-row"><span style="color:#4ade80">G</span><span>${gLo} → ${gHi}</span></div>
+    <div class="hsv-bar" style="background:linear-gradient(90deg,rgb(0,${gLo},0),rgb(0,${gHi},0))"></div>
+    <div class="hsv-row"><span style="color:#60a5fa">B</span><span>${bLo} → ${bHi}</span></div>
+    <div class="hsv-bar" style="background:linear-gradient(90deg,rgb(0,0,${bLo}),rgb(0,0,${bHi}))"></div>
+    <div style="margin-top:6px;font-size:10px;color:var(--text3)">${samplerSamples.length} punt${samplerSamples.length!==1?'en':''} · marges ±H${hm} S${sm} V/RGB${vm}</div>`;
+
+  document.getElementById('samplerFooterMsg').textContent =
+    `${samplerSamples.length} punt${samplerSamples.length!==1?'en':''} — HSV: H${hLo}–${hHi} S${sLo}–${sHi} V${vLo}–${vHi}  |  RGB: R${rLo}–${rHi} G${gLo}–${gHi} B${bLo}–${bHi}`;
+}
+
+function updateConfirmBtn() {
+  document.getElementById('confirmSamplerBtn').disabled = samplerSamples.length === 0;
+}
+
+// ── Water detection ───────────────────────────────────────────────────────────
+// RGB: checks directly in R, G, B space — same pixel values, different colour space than HSV
+function waterRGB(r, g, b, p) {
+  if (sampledHSVRange) {
+    // Direct inRange on R, G, B channels — derived from clicked pixels
+    const rng = sampledHSVRange;
+    return r >= rng.rLo && r <= rng.rHi &&
+           g >= rng.gLo && g <= rng.gHi &&
+           b >= rng.bLo && b <= rng.bHi;
+  }
+  // Fallback: heuristic for dark muddy water
+  const bright = (r+g+b)/3;
+  const s2 = p.sensitivity - 3;
+  if (bright > p.brightMax + s2*12) return false;
+  if (g > r+18 && g > b+18 && bright > 40) return false;
+  if (bright > 155 && Math.abs(r-g)<18 && Math.abs(g-b)<18) return false;
+  const mx=Math.max(r,g,b), mn=Math.min(r,g,b);
+  const sat = mx>0?(mx-mn)/mx*100:0;
+  if (sat < p.sMax + s2*8 && bright < p.vMax*2.55 + s2*15) return true;
+  if (r >= b-5 && sat < 70 && bright < p.brightMax + s2*12) return true;
+  return false;
+}
+
+// HSV: checks in Hue, Saturation, Value space — separates colour from brightness
+function waterHSV(r, g, b, p) {
+  if (sampledHSVRange) {
+    // inRange on H, S, V channels — derived from same clicked pixels, different space
+    const [h, s, v] = toHsvOpenCV(r, g, b);
+    const rng = sampledHSVRange;
+    return h >= rng.hLo && h <= rng.hHi &&
+           s >= rng.sLo && s <= rng.sHi &&
+           v >= rng.vLo && v <= rng.vHi;
+  }
+  // Fallback heuristic
+  const [h, s, v] = toHsv(r, g, b);
+  const sens = p.sensitivity - 3;
+  const bright = (r+g+b)/3;
+  if (bright > p.brightMax + sens*12) return false;
+  if (h>=80 && h<=155 && s>28 && v>25) return false;
+  if (v > 72 && s < 18) return false;
+  const darkEnough = v < p.vMax + sens*8;
+  if (!darkEnough) return false;
+  const brownish = (h>=0&&h<=60+sens*5)||(h>=330);
+  const greyish  = s < p.sMax*0.45 + sens*5;
+  const darkRef  = h>=170&&h<=235&&s<50;
+  return brownish || greyish || darkRef;
+}
+
+// ── SAM3 — Roboflow SAM3 via Cloudflare Worker proxy (geen CORS) ─────────────
+// De Cloudflare Worker stuurt de request door naar Roboflow SAM3 server-side.
+// Werkt vanuit GitHub Pages, file://, en elke andere omgeving.
+
+const PROXY_URL = 'https://sweet-boat-09ad.pepijnpjonkman.workers.dev';
+
+async function runSAM2_HF(params) {
+  const dest = document.getElementById('canvas-sam2');
+  if (!dest) return;
+
+  const statusEl = document.getElementById('rfKeyStatus');
+
+  // 1. Schaal naar 512px — API-sleutel zit in de Cloudflare Worker
+  setLoadingText('loading-sam2', 'Afbeelding voorbereiden...');
+  const blob = await resizeImageToBlob(uploadedDataURL, 512);
+  const b64  = await blobToBase64(blob);
+
+  // 2. Roboflow SAM3 via Cloudflare Worker (geen CORS)
+  setLoadingText('loading-sam2', 'SAM3 analyseert via Roboflow...');
+
+  let rfResult;
+  try {
+    const resp = await fetch(PROXY_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        image_b64: b64,
+        prompts: [
+          { type: 'text', text: 'water' },
+          { type: 'text', text: 'flood water' },
+          { type: 'text', text: 'river' },
+          { type: 'text', text: 'puddle' },
+          { type: 'text', text: 'wet soil' },
+        ]
+      })
+    });
+
+    if (!resp.ok) throw new Error(`Proxy fout ${resp.status}: ${(await resp.text()).slice(0, 150)}`);
+    rfResult = await resp.json();
+    if (rfResult.error) throw new Error(rfResult.error);
+    if (statusEl) { statusEl.textContent = '✓ SAM3 klaar'; statusEl.style.color = 'var(--green)'; }
+
+  } catch(e) {
+    setStatusEl('loading-sam2', `❌ ${e.message}`);
+    if (statusEl) { statusEl.textContent = '❌ Fout'; statusEl.style.color = 'var(--red)'; }
+    console.error('SAM3 error:', e);
+    return;
+  }
+
+  // 3. Polygonen → pixel masker
+  setLoadingText('loading-sam2', 'Masker renderen...');
+  const { srcCanvas } = await getSrcCanvas(512);
+  const imgW = srcCanvas.width, imgH = srcCanvas.height;
+
+  const maskCanvas = document.createElement('canvas');
+  maskCanvas.width = imgW; maskCanvas.height = imgH;
+  const mctx = maskCanvas.getContext('2d');
+  mctx.fillStyle = 'white';
+
+  let totalPolygons = 0;
+  for (const promptResult of (rfResult.prompt_results || [])) {
+    for (const pred of (promptResult.predictions || [])) {
+      if ((pred.confidence || 1) < 0.25) continue;
+      for (const polygon of (pred.masks || [])) {
+        if (polygon.length < 3) continue;
+        mctx.beginPath();
+        mctx.moveTo(polygon[0][0], polygon[0][1]);
+        for (let i = 1; i < polygon.length; i++) mctx.lineTo(polygon[i][0], polygon[i][1]);
+        mctx.closePath();
+        mctx.fill();
+        totalPolygons++;
+      }
+    }
+  }
+  console.log(`SAM3: ${totalPolygons} polygonen getekend`);
+
+  // 4. Overlay tekenen
+  const maskData = mctx.getImageData(0, 0, imgW, imgH).data;
+  dest.width = imgW; dest.height = imgH;
+  const ctx = dest.getContext('2d');
+  ctx.drawImage(srcCanvas, 0, 0);
+  const out = ctx.getImageData(0, 0, imgW, imgH);
+  const d = out.data;
+  const [cr,cg,cb] = COLORS.sam2;
+  const oa = params.alpha;
+  let waterPx = 0;
+
+  for (let i = 0; i < maskData.length / 4; i++) {
+    const pi = i * 4;
+    if (maskData[pi] > 128) {
+      d[pi]   = Math.round(d[pi]  *(1-oa)+cr*oa);
+      d[pi+1] = Math.round(d[pi+1]*(1-oa)+cg*oa);
+      d[pi+2] = Math.round(d[pi+2]*(1-oa)+cb*oa);
+      waterPx++;
+    } else {
+      d[pi]   = Math.round(d[pi]  *0.52);
+      d[pi+1] = Math.round(d[pi+1]*0.52);
+      d[pi+2] = Math.round(d[pi+2]*0.52);
+    }
+  }
+  ctx.putImageData(out, 0, 0);
+
+  const ld = document.getElementById('loading-sam2');
+  if (ld) ld.remove();
+  const dlBtn = document.getElementById('dl-sam2');
+  if (dlBtn) dlBtn.disabled = false;
+
+  const total = imgW * imgH;
+  const pct   = Math.round(waterPx / total * 100);
+  const setEl = (id,txt,cls) => { const el=document.getElementById(id); if(el){el.textContent=txt;if(cls)el.className='stat-value '+cls;} };
+  setEl('coverage-sam2', pct+'%', riskClass(pct));
+  setEl('pixels-sam2',   (waterPx/1e6).toFixed(2)+' Mpx');
+  setEl('risk-sam2',     riskLabel(pct), riskClass(pct));
+}
+
+
+
+// ── HSV-SAM2 — Interactief: klik op canvas → SAM2 tekent omlijning ────────────
+// Bij initialisatie: teken originele afbeelding op canvas, maak klikbaar
+// Bij elke klik: stuur klikpunt als SAM3 point prompt naar proxy
+// Resultaat: gecombineerd masker (alle klikpunten samen) als gekleurde contour
+
+let hsvSam2Points   = [];   // [{nx,ny}] — native beeldcoördinaten
+let hsvSam2Masks    = [];   // gecombineerd masker per klik (Uint8Array)
+let hsvSam2Running  = false;
+let hsvSam2NatW = 0, hsvSam2NatH = 0;
+
+async function runHSVSAM2(params) {
+  const dest = document.getElementById('canvas-hsv-sam2');
+  if (!dest) return;
+
+  // Initialiseer: teken originele afbeelding op canvas, maak klikbaar
+  const { srcCanvas } = await getSrcCanvas(512);
+  hsvSam2NatW = srcCanvas.width;
+  hsvSam2NatH = srcCanvas.height;
+  hsvSam2Points = [];
+  hsvSam2Masks  = [];
+  hsvSam2Running = false;
+
+  // Stel canvas in op juiste grootte
+  dest.width  = srcCanvas.width;
+  dest.height = srcCanvas.height;
+  const ctx = dest.getContext('2d');
+  ctx.drawImage(srcCanvas, 0, 0);
+
+  // Verberg loading overlay — kaart is direct bruikbaar
+  const ld = document.getElementById('loading-hsv-sam2');
+  if (ld) ld.style.display = 'none';
+
+  // Sla params op voor hergebruik bij klikken
+  dest._params = params;
+  dest._srcCanvas = srcCanvas;
+
+  // Bind klik-handler (links = toevoegen, rechts = verwijderen)
+  dest.onclick = hsvSam2CanvasClick;
+  dest.oncontextmenu = hsvSam2RightClick;
+
+  // Update hint
+  const proxyUrl = (document.getElementById('sam2ProxyUrl')?.value || '').trim();
+  const hint = document.getElementById('hsv-sam2-hint');
+  if (hint) {
+    if (!proxyUrl) {
+      hint.textContent = '⚠️ Vul eerst de proxy-URL in de gele balk in';
+      hint.style.color = '#fca5a5';
+    } else {
+      hint.textContent = '📍 Klik = water  ·  Shift+klik = geen water  ·  Rechts = verwijder';
+      hint.style.color = '#fcd34d';
+    }
+  }
+}
+
+function clearHsvSam2Points() {
+  hsvSam2Points = [];
+  hsvSam2Masks  = [];
+  const dest = document.getElementById('canvas-hsv-sam2');
+  if (dest && dest._srcCanvas) {
+    const ctx = dest.getContext('2d');
+    ctx.drawImage(dest._srcCanvas, 0, 0);
+  }
+  const badge = document.getElementById('hsv-sam2-badge');
+  if (badge) badge.style.display = 'none';
+  const hint = document.getElementById('hsv-sam2-hint');
+  if (hint) { hint.textContent = '📍 Klik = water  ·  Shift+klik = geen water  ·  Rechts = verwijder'; hint.style.color = '#fcd34d'; }
+  const setEl = (id,txt,cls) => { const el=document.getElementById(id); if(el){el.textContent=txt;if(cls)el.className='stat-value '+cls;} };
+  setEl('coverage-hsv-sam2','—'); setEl('pixels-hsv-sam2','—'); setEl('risk-hsv-sam2','—');
+  const dlBtn = document.getElementById('dl-hsv-sam2');
+  if (dlBtn) dlBtn.disabled = true;
+}
+
+async function hsvSam2CanvasClick(e) {
+  if (hsvSam2Running) return;
+
+  const dest = document.getElementById('canvas-hsv-sam2');
+  const proxyUrl = (document.getElementById('sam2ProxyUrl')?.value || '').trim().replace(/\/$/, '');
+  if (!proxyUrl) {
+    const hint = document.getElementById('hsv-sam2-hint');
+    if (hint) { hint.textContent = '⚠️ Vul eerst de proxy-URL in!'; hint.style.color = '#fca5a5'; }
+    return;
+  }
+
+  // Canvas display vs. internal size
+  const rect = dest.getBoundingClientRect();
+  const scaleX = dest.width  / rect.width;
+  const scaleY = dest.height / rect.height;
+  const nx = Math.round((e.clientX - rect.left) * scaleX);
+  const ny = Math.round((e.clientY - rect.top)  * scaleY);
+  if (nx < 0 || nx >= hsvSam2NatW || ny < 0 || ny >= hsvSam2NatH) return;
+
+  // Shift+klik = negatief punt (label 0 = geen water)
+  const label = e.shiftKey ? 0 : 1;
+  hsvSam2Points.push({ nx, ny, label });
+  hsvSam2Running = true;
+
+  const ld = document.getElementById('loading-hsv-sam2');
+  if (ld) { ld.style.display = 'flex'; ld.querySelector('.loading-text').textContent = 'AI segmenteert...'; }
+  const hint = document.getElementById('hsv-sam2-hint');
+  if (hint) hint.style.display = 'none';
+
+  try {
+    const blob = await resizeImageToBlob(uploadedDataURL, 512);
+    const b64  = await blobToBase64(blob);
+    const points = hsvSam2Points.map(p => [p.nx, p.ny]);
+    const labels = hsvSam2Points.map(p => p.label);
+
+    const resp = await fetch(`${proxyUrl}/segment`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ image_b64: b64, points, labels })
+    });
+    if (!resp.ok) throw new Error(`Proxy fout ${resp.status}: ${(await resp.text()).slice(0,120)}`);
+    const data = await resp.json();
+    const maskPixels = await decodeMaskPNG(data.mask_b64, dest.width, dest.height);
+
+    // Teken originele afbeelding + overlay
+    const srcCv = dest._srcCanvas;
+    const ctx = dest.getContext('2d');
+    ctx.drawImage(srcCv, 0, 0);
+    const imgData = ctx.getImageData(0, 0, dest.width, dest.height);
+    const d = imgData.data;
+    const [cr,cg,cb] = COLORS['hsv-sam2'];
+    const oa = (dest._params?.alpha || 0.72);
+    let waterPx = 0;
+
+    for (let i = 0; i < maskPixels.length; i++) {
+      const pi = i * 4;
+      if (maskPixels[i] > 128) {
+        d[pi]   = Math.round(d[pi]  *(1-oa)+cr*oa);
+        d[pi+1] = Math.round(d[pi+1]*(1-oa)+cg*oa);
+        d[pi+2] = Math.round(d[pi+2]*(1-oa)+cb*oa);
+        waterPx++;
+      } else {
+        d[pi]   = Math.round(d[pi]  *0.55);
+        d[pi+1] = Math.round(d[pi+1]*0.55);
+        d[pi+2] = Math.round(d[pi+2]*0.55);
+      }
+    }
+    ctx.putImageData(imgData, 0, 0);
+
+    drawContour(ctx, maskPixels, dest.width, dest.height);
+    drawHsvSam2Points(ctx);
+
+    // Statistieken
+    const total = dest.width * dest.height;
+    const pct = Math.round(waterPx / total * 100);
+    const setEl = (id,txt,cls) => { const el=document.getElementById(id); if(el){el.textContent=txt;if(cls)el.className='stat-value '+cls;} };
+    setEl('coverage-hsv-sam2', pct+'%', riskClass(pct));
+    setEl('pixels-hsv-sam2', (waterPx/1e6).toFixed(2)+' Mpx');
+    setEl('risk-hsv-sam2', riskLabel(pct), riskClass(pct));
+
+    const pos = hsvSam2Points.filter(p=>p.label===1).length;
+    const neg = hsvSam2Points.filter(p=>p.label===0).length;
+    const badge = document.getElementById('hsv-sam2-badge');
+    if (badge) { badge.textContent = `${pos}✚ ${neg}✖`; badge.style.display = ''; }
+
+    const dlBtn = document.getElementById('dl-hsv-sam2');
+    if (dlBtn) dlBtn.disabled = false;
+
+  } catch(err) {
+    console.error('HSV-SAM2 klik fout:', err);
+    if (hint) { hint.style.display=''; hint.textContent = `❌ ${err.message.slice(0,60)}`; hint.style.color = '#fca5a5'; }
+    hsvSam2Points.pop();
+  } finally {
+    if (ld) ld.style.display = 'none';
+    if (hint) {
+      hint.style.display = '';
+      if (!hint.textContent.startsWith('❌')) {
+        const pos = hsvSam2Points.filter(p=>p.label===1).length;
+        const neg = hsvSam2Points.filter(p=>p.label===0).length;
+        hint.textContent = `📍 ${pos} water · 🚫 ${neg} uitgesloten  ·  Shift+klik = uitsluiten  ·  Rechts = verwijder`;
+        hint.style.color = '#fcd34d';
+      }
+    }
+    hsvSam2Running = false;
+  }
+}
+
+// ── Rechts-klik: verwijder dichtstbijzijnde punt ──────────────────────────────
+async function hsvSam2RightClick(e) {
+  e.preventDefault();
+  if (hsvSam2Running || hsvSam2Points.length === 0) return;
+
+  const dest = document.getElementById('canvas-hsv-sam2');
+  const rect = dest.getBoundingClientRect();
+  const mx = (e.clientX - rect.left) * (dest.width  / rect.width);
+  const my = (e.clientY - rect.top)  * (dest.height / rect.height);
+
+  // Zoek dichtstbijzijnd punt
+  let bestIdx = -1, bestD = Infinity;
+  hsvSam2Points.forEach((p, i) => {
+    const d = Math.hypot(p.nx - mx, p.ny - my);
+    if (d < bestD) { bestD = d; bestIdx = i; }
+  });
+
+  if (bestIdx < 0 || bestD > 25) return; // te ver weg
+  hsvSam2Points.splice(bestIdx, 1);
+
+  if (hsvSam2Points.length === 0) {
+    // Reset naar originele afbeelding
+    const ctx = dest.getContext('2d');
+    ctx.drawImage(dest._srcCanvas, 0, 0);
+    const badge = document.getElementById('hsv-sam2-badge');
+    if (badge) badge.style.display = 'none';
+    const hint = document.getElementById('hsv-sam2-hint');
+    if (hint) { hint.textContent = '📍 Klik = water  ·  Shift+klik = geen water  ·  Rechts = verwijder'; hint.style.color = '#fcd34d'; }
+    return;
+  }
+
+  // Herbereken masker zonder verwijderd punt
+  await hsvSam2Recompute();
+}
+
+// ── Herbereken na punt-verwijdering ──────────────────────────────────────────
+async function hsvSam2Recompute() {
+  if (hsvSam2Running || hsvSam2Points.length === 0) return;
+  const dest = document.getElementById('canvas-hsv-sam2');
+  const proxyUrl = (document.getElementById('sam2ProxyUrl')?.value || '').trim().replace(/\/$/, '');
+  if (!proxyUrl) return;
+
+  hsvSam2Running = true;
+  const ld = document.getElementById('loading-hsv-sam2');
+  if (ld) { ld.style.display = 'flex'; ld.querySelector('.loading-text').textContent = 'Herbereken...'; }
+
+  try {
+    const blob = await resizeImageToBlob(uploadedDataURL, 512);
+    const b64  = await blobToBase64(blob);
+    const points = hsvSam2Points.map(p => [p.nx, p.ny]);
+    const labels = hsvSam2Points.map(p => p.label);
+
+    const resp = await fetch(`${proxyUrl}/segment`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ image_b64: b64, points, labels })
+    });
+    if (!resp.ok) throw new Error(`Proxy fout ${resp.status}`);
+    const data = await resp.json();
+    const maskPixels = await decodeMaskPNG(data.mask_b64, dest.width, dest.height);
+
+    const ctx = dest.getContext('2d');
+    ctx.drawImage(dest._srcCanvas, 0, 0);
+    const imgData = ctx.getImageData(0, 0, dest.width, dest.height);
+    const d = imgData.data;
+    const [cr,cg,cb] = COLORS['hsv-sam2'];
+    const oa = dest._params?.alpha || 0.72;
+    let waterPx = 0;
+
+    for (let i = 0; i < maskPixels.length; i++) {
+      const pi = i * 4;
+      if (maskPixels[i] > 128) {
+        d[pi]   = Math.round(d[pi]  *(1-oa)+cr*oa);
+        d[pi+1] = Math.round(d[pi+1]*(1-oa)+cg*oa);
+        d[pi+2] = Math.round(d[pi+2]*(1-oa)+cb*oa);
+        waterPx++;
+      } else {
+        d[pi]   = Math.round(d[pi]  *0.55);
+        d[pi+1] = Math.round(d[pi+1]*0.55);
+        d[pi+2] = Math.round(d[pi+2]*0.55);
+      }
+    }
+    ctx.putImageData(imgData, 0, 0);
+    drawContour(ctx, maskPixels, dest.width, dest.height);
+    drawHsvSam2Points(ctx);
+
+    const total = dest.width * dest.height;
+    const pct = Math.round(waterPx / total * 100);
+    const setEl = (id,txt,cls) => { const el=document.getElementById(id); if(el){el.textContent=txt;if(cls)el.className='stat-value '+cls;} };
+    setEl('coverage-hsv-sam2', pct+'%', riskClass(pct));
+    setEl('pixels-hsv-sam2', (waterPx/1e6).toFixed(2)+' Mpx');
+    setEl('risk-hsv-sam2', riskLabel(pct), riskClass(pct));
+
+    const pos = hsvSam2Points.filter(p=>p.label===1).length;
+    const neg = hsvSam2Points.filter(p=>p.label===0).length;
+    const badge = document.getElementById('hsv-sam2-badge');
+    if (badge) { badge.textContent = `${pos}✚ ${neg}✖`; badge.style.display = ''; }
+    const hint = document.getElementById('hsv-sam2-hint');
+    if (hint) { hint.textContent = `📍 ${pos} water · 🚫 ${neg} uitgesloten  ·  Shift+klik = uitsluiten  ·  Rechts = verwijder`; hint.style.color = '#fcd34d'; }
+
+  } catch(err) {
+    console.error('Herbereken fout:', err);
+  } finally {
+    if (ld) ld.style.display = 'none';
+    hsvSam2Running = false;
+  }
+}
+
+// ── Teken alle punten op het canvas ──────────────────────────────────────────
+function drawHsvSam2Points(ctx) {
+  hsvSam2Points.forEach((p, i) => {
+    const isNeg = p.label === 0;
+    ctx.beginPath();
+    ctx.arc(p.nx, p.ny, 6, 0, Math.PI*2);
+    // Groen = water (positief), rood = uitsluiting (negatief)
+    ctx.fillStyle = isNeg ? 'rgba(239,68,68,0.9)' : 'rgba(245,158,11,0.9)';
+    ctx.fill();
+    ctx.strokeStyle = 'white';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+    // Symbool in het punt
+    ctx.fillStyle = 'white';
+    ctx.font = 'bold 8px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(isNeg ? '✕' : (i+1), p.nx, p.ny);
+  });
+}
+
+// ── Teken contour langs masker-rand ──────────────────────────────────────────
+function drawContour(ctx, maskPixels, W, H) {
+  ctx.strokeStyle = '#f59e0b';
+  ctx.lineWidth = 2;
+  ctx.shadowColor = 'rgba(0,0,0,0.8)';
+  ctx.shadowBlur = 3;
+  ctx.beginPath();
+  // Scan voor randpixels: pixel is water maar een buur is dat niet
+  for (let y = 1; y < H-1; y++) {
+    for (let x = 1; x < W-1; x++) {
+      const i = y*W+x;
+      if (maskPixels[i] > 128) {
+        // Check of het een randpixel is
+        const isEdge = maskPixels[(y-1)*W+x] <= 128 || maskPixels[(y+1)*W+x] <= 128
+                    || maskPixels[y*W+(x-1)] <= 128 || maskPixels[y*W+(x+1)] <= 128;
+        if (isEdge) {
+          ctx.moveTo(x, y);
+          ctx.lineTo(x+1, y+1);
+        }
+      }
+    }
+  }
+  ctx.stroke();
+  ctx.shadowBlur = 0;
+}
+
+// ── Helper: find bounding boxes of connected regions in a binary mask ────────
+function findBoundingBoxes(mask, W, H, minSize) {
+  // Simple row-scan to collect distinct horizontal runs and merge vertically
+  const visited = new Uint8Array(W * H);
+  const boxes = [];
+
+  for (let y = 0; y < H; y++) {
+    for (let x = 0; x < W; x++) {
+      const i = y * W + x;
+      if (!mask[i] || visited[i]) continue;
+      // BFS flood fill — limit to 10k pixels for speed
+      let x1=x, y1=y, x2=x, y2=y, count=0;
+      const queue = [i]; visited[i] = 1;
+      while (queue.length && count < 10000) {
+        const idx = queue.shift(); count++;
+        const cx = idx % W, cy = Math.floor(idx / W);
+        if (cx < x1) x1=cx; if (cx > x2) x2=cx;
+        if (cy < y1) y1=cy; if (cy > y2) y2=cy;
+        const nbrs = [idx-1, idx+1, idx-W, idx+W];
+        for (const n of nbrs) {
+          if (n >= 0 && n < W*H && mask[n] && !visited[n]) {
+            visited[n] = 1; queue.push(n);
+          }
+        }
+      }
+      if (x2-x1 >= minSize || y2-y1 >= minSize) boxes.push({x1,y1,x2,y2});
+    }
+  }
+  return boxes;
+}
+
+// ── Helper: draw overlay onto a destination canvas ───────────────────────────
+function drawMaskOverlay(dest, srcCv, maskArr, method, alpha) {
+  dest.width = srcCv.width; dest.height = srcCv.height;
+  const ctx = dest.getContext('2d');
+  ctx.drawImage(srcCv, 0, 0);
+  const out = ctx.getImageData(0, 0, srcCv.width, srcCv.height);
+  const d = out.data;
+  const [cr,cg,cb] = COLORS[method] || [245,158,11];
+  for (let i = 0; i < maskArr.length; i++) {
+    const pi = i * 4;
+    if (maskArr[i]) {
+      d[pi]   = Math.round(d[pi]  *(1-alpha)+cr*alpha);
+      d[pi+1] = Math.round(d[pi+1]*(1-alpha)+cg*alpha);
+      d[pi+2] = Math.round(d[pi+2]*(1-alpha)+cb*alpha);
+    } else {
+      d[pi]   = Math.round(d[pi]  *0.52);
+      d[pi+1] = Math.round(d[pi+1]*0.52);
+      d[pi+2] = Math.round(d[pi+2]*0.52);
+    }
+  }
+  ctx.putImageData(out, 0, 0);
+}
+
+// ── Helper: update card stats and enable download ────────────────────────────
+function finishCard(method, maskArr, W, H) {
+  const ld = document.getElementById('loading-'+method);
+  if (ld) ld.remove();
+  const dlBtn = document.getElementById('dl-'+method);
+  if (dlBtn) dlBtn.disabled = false;
+  const waterPx = maskArr.reduce((a,v) => a+v, 0);
+  const pct = Math.round(waterPx / (W*H) * 100);
+  const setEl = (id, txt, cls) => { const el=document.getElementById(id); if(el){el.textContent=txt;if(cls)el.className='stat-value '+cls;} };
+  setEl('coverage-'+method, pct+'%', riskClass(pct));
+  setEl('pixels-'+method,   (waterPx/1e6).toFixed(2)+' Mpx');
+  setEl('risk-'+method,     riskLabel(pct), riskClass(pct));
+}
+function blobToBase64(blob) {
+  return new Promise(resolve => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result.split(',')[1]);
+    reader.readAsDataURL(blob);
+  });
+}
+
+// ── Helper: resize image → Blob (JPEG, max dimension px) ─────────────────────
+function resizeImageToBlob(dataURL, maxDim) {
+  return new Promise(resolve => {
+    const img = new Image();
+    img.onload = () => {
+      const scale = Math.min(1, maxDim / Math.max(img.naturalWidth, img.naturalHeight));
+      const w = Math.round(img.naturalWidth  * scale);
+      const h = Math.round(img.naturalHeight * scale);
+      const c = document.createElement('canvas');
+      c.width = w; c.height = h;
+      c.getContext('2d').drawImage(img, 0, 0, w, h);
+      c.toBlob(resolve, 'image/jpeg', 0.80); // lower quality = smaller payload
+    };
+    img.src = dataURL;
+  });
+}
+
+// ── Helper: decode base64 PNG mask → Uint8Array, rescaled to (targetW × targetH) ─
+function decodeMaskPNG(b64, targetW, targetH) {
+  return new Promise(resolve => {
+    const img = new Image();
+    img.onload = () => {
+      // Draw into a canvas at the target size so it matches our srcCanvas exactly
+      const c = document.createElement('canvas');
+      c.width = targetW; c.height = targetH;
+      const ctx = c.getContext('2d');
+      ctx.drawImage(img, 0, 0, targetW, targetH);
+      const data = ctx.getImageData(0, 0, targetW, targetH).data;
+      const grey = new Uint8Array(targetW * targetH);
+      for (let i = 0; i < grey.length; i++) grey[i] = data[i*4];
+      // Free the canvas immediately
+      c.width = 1; c.height = 1;
+      resolve(grey);
+    };
+    img.src = 'data:image/png;base64,' + b64;
+  });
+}
+
+// ── Helper: get source canvas + pixel data, capped at maxDim ─────────────────
+async function getSrcCanvas(maxDim) {
+  return new Promise(resolve => {
+    const img = new Image();
+    img.onload = () => {
+      const scale = maxDim ? Math.min(1, maxDim / Math.max(img.naturalWidth, img.naturalHeight)) : 1;
+      const w = Math.round(img.naturalWidth  * scale);
+      const h = Math.round(img.naturalHeight * scale);
+      const c = document.createElement('canvas');
+      c.width = w; c.height = h;
+      const ctx = c.getContext('2d');
+      ctx.drawImage(img, 0, 0, w, h);
+      resolve({ srcCanvas: c, srcData: ctx.getImageData(0, 0, w, h).data });
+    };
+    img.src = uploadedDataURL;
+  });
+}
+
+// ── Helper: update loading overlay text ──────────────────────────────────────
+function setLoadingText(id, text) {
+  const el = document.getElementById(id);
+  if (el) { const t = el.querySelector('.loading-text'); if (t) t.textContent = text; }
+}
+function setStatusEl(loadingId, text) {
+  const el = document.getElementById(loadingId);
+  if (el) el.innerHTML = `<div style="padding:16px;font-size:12px;color:var(--amber);text-align:center">${text}</div>`;
+}
+
+const COLORS = { rgb:[59,130,246], hsv:[20,184,166], sam2:[168,85,247], 'hsv-sam2':[245,158,11] };
+
+async function runMethod(method, params) {
+  const { canvas, px } = await loadSrc();
+  const dest = document.getElementById('canvas-'+method);
+  if (!dest) return;
+  dest.width = canvas.width; dest.height = canvas.height;
+  const ctx = dest.getContext('2d');
+  ctx.drawImage(canvas, 0, 0);
+  const out = ctx.getImageData(0, 0, canvas.width, canvas.height);
+  const d = out.data, src = px.data;
+  const [cr,cg,cb] = COLORS[method];
+  const oa = params.alpha;
+  let waterPx = 0;
+
+  for (let i=0; i<src.length; i+=4) {
+    const r=src[i], g=src[i+1], b=src[i+2];
+    const ix = (i/4) % canvas.width;
+    const iy = Math.floor(i/4/canvas.width);
+    let isW = false;
+    if      (method==='rgb')  isW = waterRGB(r,g,b,params);
+    else if (method==='hsv')  isW = waterHSV(r,g,b,params);
+    else if (method==='sam2') isW = waterSAM2(r,g,b,ix,iy,canvas.width,canvas.height,params);
+
+    if (isW) {
+      d[i]   = Math.round(r*(1-oa)+cr*oa);
+      d[i+1] = Math.round(g*(1-oa)+cg*oa);
+      d[i+2] = Math.round(b*(1-oa)+cb*oa);
+      d[i+3] = 255;
+      waterPx++;
+    } else {
+      d[i]   = Math.round(r*0.52);
+      d[i+1] = Math.round(g*0.52);
+      d[i+2] = Math.round(b*0.52);
+      d[i+3] = 255;
+    }
+  }
+  ctx.putImageData(out, 0, 0);
+
+  const ld = document.getElementById('loading-'+method);
+  if (ld) ld.remove();
+
+  const dlBtn = document.getElementById('dl-'+method);
+  if (dlBtn) dlBtn.disabled = false;
+
+  const total = canvas.width*canvas.height;
+  const pct = Math.round(waterPx/total*100);
+  const mpx = (waterPx/1e6).toFixed(2);
+
+  const setEl = (id, txt, cls) => {
+    const el = document.getElementById(id);
+    if (el) { el.textContent = txt; if (cls) el.className = 'stat-value '+cls; }
+  };
+  setEl('coverage-'+method, pct+'%', riskClass(pct));
+  setEl('pixels-'+method,   mpx+' Mpx');
+  setEl('risk-'+method,     riskLabel(pct), riskClass(pct));
+}
+
+function downloadResult(method) {
+  const c = document.getElementById('canvas-'+method);
+  if (!c) return;
+  const a = document.createElement('a');
+  a.download = 'waterscan_'+method+'_'+Date.now()+'.png';
+  a.href = c.toDataURL('image/png');
+  a.click();
+}
+
+function riskClass(p) { return p>=25?'danger':p>=10?'warn':'ok'; }
+function riskLabel(p) { return p>=25?'Hoog':p>=10?'Matig':'Laag'; }
+
+async function getAIAnalysis(methods, params) {
+  const panel = document.getElementById('aiPanel');
+  if (!panel) return;
+
+  panel.innerHTML = `<div class="analysis-panel"><h3>🤖 Claude Vision Analyse</h3>
+    <div style="display:flex;align-items:center;gap:10px;padding:8px 0">
+      <div class="spinner"></div><span style="font-size:12px;color:var(--text2)">Analyseren...</span>
+    </div></div>`;
+
+  // Verzamel statistieken van alle uitgevoerde methoden voor context
+  const methodNames = { rgb:'RGB', hsv:'HSV', sam2:'AI Scan', 'hsv-sam2':'Segmenteren n.a.v. punten' };
+  const stats = {};
+  for (const m of methods) {
+    const covEl = document.getElementById('coverage-' + m);
+    if (covEl && covEl.textContent !== '—') stats[m] = covEl.textContent;
+  }
+  const statsText = Object.entries(stats).map(([m,v]) => `${methodNames[m]||m}: ${v}`).join(', ');
+
+  const base64 = uploadedDataURL.split(',')[1];
+  const mt = uploadedDataURL.split(';')[0].split(':')[1];
+
+  const prompt = `Je bent expert in teledetectie en wateroverlastanalyse van droneopnamen.
+
+Detectieresultaten: ${statsText} | Gevoeligheid: ${params.sensitivity}/5
+
+Let op: dit is een DRONE-opname. Water is hier donker, modderig en bruin — GEEN blauw water.
+
+Geef een technische analyse in het Nederlands (max 250 woorden) met deze onderdelen:
+
+1. WAT ZIE JE: beschrijf het terrein (waterloop, infrastructuur, vegetatie, etc.)
+2. WATEROVERLAST: waar zijn natte/overstroomde zones zichtbaar?
+3. RISICO-INSCHATTING: geef Laag/Matig/Hoog en leg uit WAAROM — baseer dit op:
+   - De visueel zichtbare wateromvang in de afbeelding
+   - Het type water (stilstaand, stromend, modderig)
+   - De locatie (nabij infrastructuur, bebouwing, landbouw?)
+   - De detectiepercentages van de methoden
+4. METHODE-VERGELIJKING: welke methode past het beste bij dit beeld en waarom?
+5. AANBEVELING: wat zou een waterbeheerder nu moeten doen?`;
+
+  try {
+    const ANALYSE_URL = 'https://sweet-boat-09ad.pepijnpjonkman.workers.dev/analyse';
+    const resp = await fetch(ANALYSE_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 1200,
+        messages: [{
+          role: 'user',
+          content: [
+            { type: 'image', source: { type: 'base64', media_type: mt, data: base64 } },
+            { type: 'text', text: prompt }
+          ]
+        }]
+      })
+    });
+    const data = await resp.json();
+    const text = (data.content?.map(c => c.text||'').join('') || 'Analyse niet beschikbaar.').trim();
+    panel.innerHTML = `<div class="analysis-panel"><h3>🤖 Claude Vision Analyse</h3><div class="analysis-text">${text}</div></div>`;
+  } catch(e) {
+    panel.innerHTML = `<div class="analysis-panel"><h3>🤖 Claude Vision Analyse</h3><div class="analysis-text" style="color:var(--text3)">Analyse tijdelijk niet beschikbaar.</div></div>`;
+  }
+}
+</script>
+
+<style>
+/* ── Handleiding modal ─────────────────────────────────────────────────────── */
+#guideModal {
+  position: fixed; inset: 0; background: rgba(5,8,18,0.88);
+  z-index: 200; display: none; align-items: center; justify-content: center;
+  backdrop-filter: blur(4px); padding: 20px;
+}
+.guide-box {
+  background: var(--bg2); border: 1px solid var(--border2);
+  border-radius: 18px; width: min(94vw, 860px); max-height: 88vh;
+  display: flex; flex-direction: column; overflow: hidden;
+  box-shadow: 0 32px 80px rgba(0,0,0,0.6);
+}
+.guide-header {
+  padding: 20px 28px 16px; border-bottom: 1px solid var(--border);
+  display: flex; align-items: flex-start; gap: 14px; flex-shrink: 0;
+}
+.guide-header-text { flex: 1; }
+.guide-header h2 { font-family: 'Syne',sans-serif; font-size: 20px; font-weight: 800; margin-bottom: 4px; }
+.guide-header p { font-size: 13px; color: var(--text2); line-height: 1.5; }
+.guide-close {
+  width: 32px; height: 32px; border-radius: 8px; border: 1px solid var(--border2);
+  background: transparent; color: var(--text2); font-size: 16px; cursor: pointer;
+  display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+  transition: all 0.15s;
+}
+.guide-close:hover { background: var(--bg3); color: var(--text); }
+.guide-tabs {
+  display: flex; gap: 0; border-bottom: 1px solid var(--border); flex-shrink: 0;
+  padding: 0 28px; overflow-x: auto;
+}
+.guide-tab {
+  padding: 10px 16px; font-size: 12px; font-weight: 500; cursor: pointer;
+  border-bottom: 2px solid transparent; color: var(--text2); white-space: nowrap;
+  background: none; border-top: none; border-left: none; border-right: none;
+  font-family: 'Space Grotesk',sans-serif; transition: all 0.15s;
+}
+.guide-tab:hover { color: var(--text); }
+.guide-tab.active { color: var(--accent2); border-bottom-color: var(--accent2); }
+.guide-body { overflow-y: auto; padding: 24px 28px; flex: 1; }
+.guide-section { display: none; }
+.guide-section.active { display: block; }
+.guide-section h3 {
+  font-family: 'Syne',sans-serif; font-size: 15px; font-weight: 700;
+  margin: 0 0 10px; color: var(--text); display: flex; align-items: center; gap: 8px;
+}
+.guide-section h3:not(:first-child) { margin-top: 28px; }
+.guide-section p { font-size: 13px; line-height: 1.75; color: var(--text2); margin-bottom: 12px; }
+.guide-section ul { padding-left: 18px; margin-bottom: 12px; }
+.guide-section li { font-size: 13px; line-height: 1.75; color: var(--text2); margin-bottom: 4px; }
+.guide-section li strong { color: var(--text); font-weight: 500; }
+.guide-step {
+  display: flex; gap: 14px; padding: 14px 16px;
+  background: var(--bg3); border-radius: 10px; border: 1px solid var(--border);
+  margin-bottom: 10px; align-items: flex-start;
+}
+.guide-step-num {
+  width: 26px; height: 26px; border-radius: 50%; display: flex; align-items: center;
+  justify-content: center; font-size: 12px; font-weight: 700; flex-shrink: 0;
+  background: rgba(59,130,246,0.15); color: var(--accent2); border: 1px solid rgba(59,130,246,0.3);
+}
+.guide-step-body { flex: 1; }
+.guide-step-body strong { font-size: 13px; font-weight: 600; color: var(--text); display: block; margin-bottom: 3px; }
+.guide-step-body span { font-size: 12px; color: var(--text2); line-height: 1.6; }
+.method-row {
+  display: flex; gap: 10px; padding: 12px 14px;
+  border-radius: 10px; border: 1px solid var(--border); margin-bottom: 8px;
+  background: var(--bg3); align-items: flex-start;
+}
+.method-badge-g {
+  font-size: 10px; font-weight: 700; padding: 3px 9px; border-radius: 5px;
+  text-transform: uppercase; letter-spacing: 0.8px; white-space: nowrap; flex-shrink: 0; margin-top: 1px;
+}
+.method-row p { font-size: 12px; color: var(--text2); line-height: 1.65; margin: 0; }
+.method-row p strong { color: var(--text); font-weight: 500; }
+.tip-box {
+  padding: 12px 14px; border-radius: 10px; margin-bottom: 10px;
+  font-size: 12px; line-height: 1.65; color: var(--text2);
+}
+.tip-box.info  { background: rgba(59,130,246,0.08);  border: 1px solid rgba(59,130,246,0.2);  }
+.tip-box.warn  { background: rgba(245,158,11,0.08);  border: 1px solid rgba(245,158,11,0.2);  }
+.tip-box.ok    { background: rgba(34,197,94,0.08);   border: 1px solid rgba(34,197,94,0.2);   }
+.tip-box strong { color: var(--text); font-weight: 600; display: block; margin-bottom: 3px; }
+.code-inline {
+  font-family: monospace; font-size: 11px; padding: 2px 6px;
+  background: rgba(255,255,255,0.06); border-radius: 4px; color: #93c5fd;
+}
+</style>
+
+<!-- Handleiding Modal -->
+<div id="guideModal">
+  <div class="guide-box">
+    <div class="guide-header">
+      <div style="font-size:28px">🌊</div>
+      <div class="guide-header-text">
+        <h2>WaterScan Handleiding</h2>
+        <p>Wateroverlast detectie op drone-opnames met RGB, HSV, AI Scan en Segmenteren methoden.</p>
+      </div>
+      <button class="guide-close" onclick="document.getElementById('guideModal').style.display='none'">✕</button>
+    </div>
+
+    <div class="guide-tabs">
+      <button class="guide-tab active" onclick="switchTab('start')">🚀 Aan de slag</button>
+      <button class="guide-tab" onclick="switchTab('methods')">🔬 Methoden</button>
+      <button class="guide-tab" onclick="switchTab('sampler')">🎯 Klikpunten</button>
+      <button class="guide-tab" onclick="switchTab('sam2')">🤖 SAM3 & HSV-SAM3</button>
+      <button class="guide-tab" onclick="switchTab('params')">⚙️ Parameters</button>
+      <button class="guide-tab" onclick="switchTab('tips')">💡 Tips</button>
+      <button class="guide-tab" onclick="switchTab('limits')">⚠️ Onnauwkeurigheden</button>
+    </div>
+
+    <div class="guide-body">
+
+      <!-- ── Aan de slag ─────────────────────────────────────────────────── -->
+      <div class="guide-section active" id="tab-start">
+        <h3>🚀 Basisworkflow</h3>
+        <p>WaterScan analyseert drone- en satellietopnames op wateroverlast door neerslag. Het water op dit soort beelden is <strong>donker, modderig en bruin/grijs</strong> — niet blauw. De client biedt vier detectiemethoden die elk op een andere manier naar water zoeken.</p>
+
+        <div class="guide-step">
+          <div class="guide-step-num">1</div>
+          <div class="guide-step-body">
+            <strong>Afbeelding laden</strong>
+            <span>Sleep een drone-opname (JPG, PNG, WebP) naar het uploadvak, of klik om te bladeren. Na het laden verschijnen alle instellingen automatisch.</span>
+          </div>
+        </div>
+        <div class="guide-step">
+          <div class="guide-step-num">2</div>
+          <div class="guide-step-body">
+            <strong>Waterpixels klikken (aanbevolen)</strong>
+            <span>Klik op <em>Selecteer waterpixels</em> in de blauwe balk. Klik op het water in de afbeelding — de tool meet de HSV-kleurwaarden op die punten en berekent automatisch kleurdrempelwaarden. Dit geldt voor RGB, HSV én HSV-SAM2.</span>
+          </div>
+        </div>
+        <div class="guide-step">
+          <div class="guide-step-num">3</div>
+          <div class="guide-step-body">
+            <strong>Methoden selecteren</strong>
+            <span>Kies welke methoden je wilt uitvoeren via de gekleurde knoppen (RGB, HSV, AI Scan, Segmenteren). Alle vier tegelijk is mogelijk.</span>
+          </div>
+        </div>
+        <div class="guide-step">
+          <div class="guide-step-num">4</div>
+          <div class="guide-step-body">
+            <strong>Analyseer klikken</strong>
+            <span>Klik op <em>Analyseer</em>. Elke methode verwerkt de afbeelding parallel en toont het resultaat zodra het klaar is. Onderaan verschijnt een Claude Vision analyse die de methoden vergelijkt.</span>
+          </div>
+        </div>
+        <div class="guide-step">
+          <div class="guide-step-num">5</div>
+          <div class="guide-step-body">
+            <strong>Resultaten downloaden</strong>
+            <span>Elke resultaatkaart heeft een <em>⬇ PNG</em> knop. Dit downloadt de afbeelding op volledige resolutie met de gekleurde overlay eroverheen — klaar voor nabewerking in GIS-software of Photoshop.</span>
+          </div>
+        </div>
+
+        <div class="tip-box info">
+          <strong>💡 Volgorde van klikken</strong>
+          Klik altijd eerst waterpixels aan vóórdat je analyseert. Zonder klikpunten gebruiken RGB en HSV heuristische drempelwaarden (minder nauwkeurig). AI Scan werkt altijd automatisch, ongeacht klikpunten.
+        </div>
+      </div>
+
+      <!-- ── Methoden ────────────────────────────────────────────────────── -->
+      <div class="guide-section" id="tab-methods">
+        <h3>🔬 Overzicht van de vier methoden</h3>
+
+        <div class="method-row">
+          <span class="method-badge-g" style="background:rgba(59,130,246,0.15);color:#93c5fd">RGB</span>
+          <p><strong>RGB kleurdrempel</strong> — vergelijkt elke pixel direct op de rood-, groen- en blauwwaarden (0–255). Na het aanklikken van waterpixels worden de min/max R, G en B waarden als boven- en ondergrens gebruikt, identiek aan <span class="code-inline">cv2.inRange()</span> in Python op het RGB-kanaal. Snel en deterministisch, maar gevoelig voor wisselende belichting.</p>
+        </div>
+
+        <div class="method-row">
+          <span class="method-badge-g" style="background:rgba(20,184,166,0.15);color:#5eead4">HSV</span>
+          <p><strong>HSV Tint-Verzadiging-Waarde filter</strong> — converteert pixels naar de HSV-kleurruimte (OpenCV-schaal: H 0–179, S 0–255, V 0–255) en past <span class="code-inline">cv2.inRange()</span> toe op de H, S en V kanalen. De kleurcomponent (H) staat los van de helderheid (V), waardoor schaduwen en wisselende belichting minder invloed hebben dan bij RGB. Robuuster voor drone-beelden met variërende lichtomstandigheden.</p>
+        </div>
+
+        <div class="method-row">
+          <span class="method-badge-g" style="background:rgba(168,85,247,0.15);color:#d8b4fe">AI Scan</span>
+          <p><strong>SAM3 drie-staps Claude analyse</strong> — stuurt de afbeelding naar Claude (Anthropic API) via drie opeenvolgende prompts: (1) scène-analyse met percentage-coördinaten, (2) rij-voor-rij redeneren over welke kolommen water bevatten, (3) JSON-masker genereren. Het resulterende 32×32 raster wordt bilineair opgeschaald. Volledig automatisch, geen klikpunten nodig. Begrijpt ruimtelijke context die kleurfilters missen.</p>
+        </div>
+
+        <div class="method-row">
+          <span class="method-badge-g" style="background:rgba(245,158,11,0.15);color:#fcd34d">Segmenteren</span>
+          <p><strong>HSV-SAM3 gecombineerde methode</strong> — voert eerst de HSV kleurfilter uit, stuurt dan de geklikte RGB/HSV punten als SAM2 <em>point prompts</em> naar de HF Space proxy. Het SAM2-masker wordt geintersect met het HSV-masker: alleen pixels die door <em>beide</em> methoden als water worden herkend tellen mee. Dit geeft scherpere regiogrenzen dan HSV alleen, en meer kleurbesef dan SAM2 alleen. Vereist de HF Space proxy.</p>
+        </div>
+
+        <h3>🔄 Wanneer welke methode?</h3>
+        <ul>
+          <li><strong>Uniforme belichting, helder water:</strong> RGB geeft de snelste en schoonste resultaten.</li>
+          <li><strong>Wisselende schaduwen of modderig water:</strong> HSV is robuuster.</li>
+          <li><strong>Onbekend terrein, geen klikpunten beschikbaar:</strong> AI Scan analyseert de scène zonder voorkennis.</li>
+          <li><strong>Maximale nauwkeurigheid met proxy beschikbaar:</strong> "Segmenteren n.a.v. punten" combineert kleurkennis met ruimtelijke segmentatie.</li>
+          <li><strong>Vergelijkende studie:</strong> zet alle vier methoden aan voor een zij-aan-zij vergelijking.</li>
+        </ul>
+      </div>
+
+      <!-- ── Klikpunten ─────────────────────────────────────────────────── -->
+      <div class="guide-section" id="tab-sampler">
+        <h3>🎯 Waterpixels aanklikken (sampler)</h3>
+        <p>De kliksampler is de belangrijkste stap voor nauwkeurige RGB- en HSV-detectie. Het principe is identiek aan de Python workflow met <span class="code-inline">cv2.EVENT_LBUTTONDOWN</span>: elk klikpunt meet de HSV-waarden op die pixellocatie, waarna automatisch een kleurrange wordt berekend.</p>
+
+        <div class="guide-step">
+          <div class="guide-step-num">1</div>
+          <div class="guide-step-body">
+            <strong>Sampler openen</strong>
+            <span>Klik op <em>📍 Selecteer waterpixels</em> in de blauwe balk. De modal toont de afbeelding op maximale breedte.</span>
+          </div>
+        </div>
+        <div class="guide-step">
+          <div class="guide-step-num">2</div>
+          <div class="guide-step-body">
+            <strong>Klikken op water</strong>
+            <span>Klik op verschillende watergebieden — de waterloop zelf, plassen, natte modder. Elk punt wordt genummerd en toont de gemeten HSV-waarden (H: 0–179, S: 0–255, V: 0–255). Meer punten = bredere maar nauwkeurigere range.</span>
+          </div>
+        </div>
+        <div class="guide-step">
+          <div class="guide-step-num">3</div>
+          <div class="guide-step-body">
+            <strong>Range-berekening</strong>
+            <span>De sidebar toont live de berekende LOWER en UPPER grenzen voor zowel de HSV-methode als de RGB-methode. Dit zijn exact dezelfde waarden als <span class="code-inline">np.array([min(H)-marge, ...])</span> in de Python code.</span>
+          </div>
+        </div>
+        <div class="guide-step">
+          <div class="guide-step-num">4</div>
+          <div class="guide-step-body">
+            <strong>Marges aanpassen</strong>
+            <span>De drie margeschuifregelaars (H ±10, S ±30, V ±30) bepalen hoe breed de range is rondom de gemeten waarden. Vergroot de marge om meer water te detecteren, verklein voor precisie.</span>
+          </div>
+        </div>
+        <div class="guide-step">
+          <div class="guide-step-num">5</div>
+          <div class="guide-step-body">
+            <strong>Bevestigen</strong>
+            <span>Klik op <em>✓ Bevestigen</em>. De range wordt opgeslagen en de status in de blauwe balk toont de actieve H/S/V-grenzen. HSV-SAM2 hergebruikt deze klikpunten automatisch als SAM3 point prompts.</span>
+          </div>
+        </div>
+
+        <div class="tip-box warn">
+          <strong>⚠️ Kleurkenmerken water op drone-opnames</strong>
+          Water op dronefoto's is bijna altijd donker (V laag), heeft weinig kleurverzadiging (S laag) en een bruin/grijze tint (H 0–60° of H 170–230°). Klik dus op de donkere zones in de waterloop, niet op reflecties of lichte plekken.
+        </div>
+
+        <div class="tip-box ok">
+          <strong>✓ Punten verwijderen</strong>
+          Klik in de sampler-sidebar op het × naast een punt om het te verwijderen. De range wordt direct herberekend. Gebruik <em>Wis selectie</em> om alle punten te verwijderen en opnieuw te beginnen.
+        </div>
+      </div>
+
+      <!-- ── SAM3 & HSV-SAM3 ─────────────────────────────────────────────── -->
+      <div class="guide-section" id="tab-sam2">
+        <h3>🤖 Artificial Intelligence Scan — automatische detectie</h3>
+        <p>De SAM3-methode gebruikt de HF Space proxy. Omdat SAM3 van origine een <em>prompted</em> model is (het heeft aanwijzingen nodig), gebruikt de proxy automatisch een slimme strategie als er geen klikpunten zijn:</p>
+        <ul>
+          <li><strong>Automatische donkere-punten detectie:</strong> de proxy verdeelt de afbeelding in 9 zones en zoekt in elke zone de donkerste pixel (helderheid &lt;90). Dit zijn de meest waarschijnlijke waterlocaties op dronefoto's.</li>
+          <li>SAM3 krijgt deze punten als <em>foreground prompts</em> en segmenteert de regio's eromheen.</li>
+          <li>Van alle teruggestuurde maskers worden alleen die geselecteerd waarbij meer dan 25% van de pixels donker is én de dekking realistisch is (niet het hele beeld).</li>
+        </ul>
+
+        <div class="tip-box info">
+          <strong>💡 SAM3 is een prompted model</strong>
+          SAM3 (Segment Anything Model 2) is ontworpen om regio's te segmenteren <em>op basis van aanwijzingen</em> — geen volledig automatische detector. De auto-strategie geeft een redelijke eerste schatting, maar voor nauwkeurige resultaten gebruik je "Segmenteren n.a.v. punten" waarbij je zelf op watergebieden klikt.
+        </div>
+
+        <h3>🔬 Segmenteren n.a.v. punten — interactie uitgelegd</h3>
+        <p>De HSV-SAM3 kaart is volledig interactief. Na het klikken op Analyseer verschijnt de originele afbeelding waarop je direct kunt klikken:</p>
+
+        <div class="guide-step">
+          <div class="guide-step-num" style="background:rgba(245,158,11,0.15);color:#fcd34d;border-color:rgba(245,158,11,0.3)">🖱</div>
+          <div class="guide-step-body">
+            <strong>Normaal klikken — water toevoegen</strong>
+            <span>Klik op een watergebied. Er verschijnt een <strong style="color:#fcd34d">geel genummerd punt</strong>. AI segmenteert de regio rondom dit punt en tekent een gouden omlijning. Elk volgend klikpunt wordt cumulatief meegestuurd — het masker groeit.</span>
+          </div>
+        </div>
+
+        <div class="guide-step">
+          <div class="guide-step-num" style="background:rgba(239,68,68,0.15);color:#fca5a5;border-color:rgba(239,68,68,0.3)">⇧</div>
+          <div class="guide-step-body">
+            <strong>Shift+klikken — gebied uitsluiten</strong>
+            <span>Houd Shift ingedrukt en klik op een gebied dat SAM3 <em>niet</em> mag meenemen (bijv. een donkere schaduw, weg of droge grond). Er verschijnt een <strong style="color:#fca5a5">rood punt met ✕</strong>. SAM3 gebruikt dit als negatieve prompt — het masker wordt verfijnd door dit gebied uit te sluiten.</span>
+          </div>
+        </div>
+
+        <div class="guide-step">
+          <div class="guide-step-num" style="background:rgba(100,116,139,0.15);color:#94a3b8;border-color:rgba(100,116,139,0.3)">⊞</div>
+          <div class="guide-step-body">
+            <strong>Rechts-klikken — punt verwijderen</strong>
+            <span>Rechts-klik op of vlakbij een bestaand punt (geel of rood) om het te verwijderen. Het masker wordt automatisch herberekend zonder dat punt. Handig als je een punt verkeerd hebt geplaatst.</span>
+          </div>
+        </div>
+
+        <div class="guide-step">
+          <div class="guide-step-num">✕</div>
+          <div class="guide-step-body">
+            <strong>Wis punten — alles resetten</strong>
+            <span>Klik op <em>✕ Wis punten</em> in de legenda van de kaart om alle punten te verwijderen en opnieuw te beginnen. De afbeelding keert terug naar de originele weergave.</span>
+          </div>
+        </div>
+
+        <div class="tip-box ok">
+          <strong>✓ Strategie voor beste resultaten</strong>
+          Klik 2–3 positieve punten op duidelijke watergebieden (de donkere waterloop, plassen). Voeg daarna 1–2 negatieve punten toe op gebieden die verkeerd gemarkeerd zijn (schaduwen, donkere droge grond). SAM3 past het masker na elke klik automatisch aan.
+        </div>
+
+        <div class="tip-box warn">
+          <strong>⚠️ Sleep-pauze na inactiviteit</strong>
+          De gratis HF Space valt na ~15 minuten inactiviteit in slaap. De eerste klik na zo'n pauze duurt 30–60 seconden. Daarna reageert hij normaal. Controleer de status via <span class="code-inline">https://Pepijn071-waterscan-sam2.hf.space/health</span>.
+        </div>
+
+        <h3>🔬 Segmenteren n.a.v. punten — proxy instellen</h3>
+        <p><strong>AI Scan</strong> gebruikt nu de Roboflow API (zie paarse balk — alleen een API-sleutel nodig). <strong>Segmenteren</strong> gebruikt nog steeds de HF Space proxy voor point-based segmentatie:</p>
+
+        <div class="tip-box ok" style="margin-bottom:16px">
+          <strong>✓ HSV-SAM3 proxy-URL (al ingevuld)</strong>
+          <span class="code-inline" style="display:block;margin-top:4px;font-size:12px">https://Pepijn071-waterscan-sam2.hf.space</span>
+          Controleer of de proxy actief is via: <span class="code-inline">https://Pepijn071-waterscan-sam2.hf.space/health</span>
+        </div>
+
+        <p>Wil je een eigen proxy draaien (bijv. voor meer privacy of GPU-snelheid), volg dan onderstaande stappen en pas de URL in het gele invoerveld aan.</p>
+
+        <div class="guide-step">
+          <div class="guide-step-num">1</div>
+          <div class="guide-step-body">
+            <strong>HF Space aanmaken</strong>
+            <span>Ga naar <strong>huggingface.co/spaces</strong> → Create new Space. Kies SDK: <strong>Docker</strong>, Hardware: <strong>CPU Basic</strong> (gratis).</span>
+          </div>
+        </div>
+        <div class="guide-step">
+          <div class="guide-step-num">2</div>
+          <div class="guide-step-body">
+            <strong>Proxy-bestanden uploaden</strong>
+            <span>Upload de vier meegeleverde bestanden: <span class="code-inline">app.py</span>, <span class="code-inline">requirements.txt</span>, <span class="code-inline">Dockerfile</span>, <span class="code-inline">README.md</span> via Files → Upload.</span>
+          </div>
+        </div>
+        <div class="guide-step">
+          <div class="guide-step-num">3</div>
+          <div class="guide-step-body">
+            <strong>Wacht op opstart</strong>
+            <span>De Space laadt het SAM3 model (~5 minuten). De URL wordt:<br>
+            <span class="code-inline">https://Pepijn071-waterscan-sam2.hf.space</span><br>
+            Controleer via <span class="code-inline">/health</span> of hij draait. Deze URL is al ingevuld in de client.</span>
+          </div>
+        </div>
+        <div class="guide-step">
+          <div class="guide-step-num">4</div>
+          <div class="guide-step-body">
+            <strong>URL invullen in client</strong>
+            <span>De proxy-URL is al automatisch ingevuld in de client:<br>
+            <span class="code-inline">https://Pepijn071-waterscan-sam2.hf.space</span><br>
+            Je hoeft hier niets aan te veranderen. SAM3 en HSV-SAM3 gebruiken beide deze URL. Wil je een eigen proxy draaien, pas dan dit veld aan.</span>
+          </div>
+        </div>
+
+        <div class="tip-box warn">
+          <strong>⚠️ GPU voor snellere resultaten</strong>
+          Op CPU duurt SAM3 inferentie 15–30 seconden. Upgrade in de Space-instellingen naar T4 Small GPU (~$0,60/uur) voor resultaten onder 3 seconden.
+        </div>
+      </div>
+
+      <!-- ── Parameters ─────────────────────────────────────────────────── -->
+      <div class="guide-section" id="tab-params">
+        <h3>⚙️ Detectieparameters uitgelegd</h3>
+        <p>De schuifregelaars in het parameters-paneel beïnvloeden de heuristische drempelwaarden die worden gebruikt als fallback (wanneer geen klikpunten zijn geselecteerd) en als aanvullende filter.</p>
+
+        <ul>
+          <li><strong>Max helderheid water (V):</strong> pixels met een helderheidswaarde (V in HSV, 0–255) boven deze grens worden als droog beschouwd. Water is donker, dus stel dit lager in voor strengere detectie. Standaard: 65.</li>
+          <li><strong>Max verzadiging (S):</strong> modderig water heeft weinig kleurpigment (lage S). Pixels met hogere verzadiging dan deze drempelwaarde worden als vegetatie of beton herkend. Standaard: 60.</li>
+          <li><strong>Max helderheid totaal:</strong> absolute bovengrens voor de gemiddelde RGB-helderheid. Voorkomt dat licht zand of betonnen wegen als water worden herkend. Standaard: 130.</li>
+          <li><strong>Overlay dekking:</strong> hoe sterk de gekleurde overlay over de originele afbeelding wordt geplot (30–100%). Lagere waarde toont meer van de originele afbeelding. Standaard: 72%.</li>
+          <li><strong>Gevoeligheid (1–5):</strong> algemene schaalfactor op alle drempelwaarden. Stand 3 = neutraal. Stand 5 = ruim (meer water gedetecteerd, meer kans op fout-positieven). Stand 1 = streng.</li>
+        </ul>
+
+        <div class="tip-box info">
+          <strong>💡 Parameters vs. klikpunten</strong>
+          Wanneer je klikpunten hebt geselecteerd via de sampler, worden de H/S/V grenzen direct uit de gemeten pixelwaarden berekend — de schuifregelaars spelen dan geen rol meer voor RGB en HSV. De parameters blijven wel actief als fallback en voor SAM3/HSV-SAM2.
+        </div>
+
+        <h3>📊 Statistieken per methode</h3>
+        <p>Elke resultaatkaart toont drie statistieken:</p>
+        <ul>
+          <li><strong>Waterdekking (%):</strong> percentage van de totale beeldpixels dat als water is geclassificeerd.</li>
+          <li><strong>Wateroppervlak (Mpx):</strong> absoluut aantal waterp pixels in megapixels.</li>
+          <li><strong>Risico:</strong> Laag (&lt;10%), Matig (10–25%), Hoog (&gt;25%) op basis van waterdekking.</li>
+        </ul>
+      </div>
+
+      <!-- ── Tips ──────────────────────────────────────────────────────── -->
+      <div class="guide-section" id="tab-tips">
+        <h3>💡 Tips voor betere resultaten</h3>
+
+        <div class="tip-box ok">
+          <strong>✓ Klik op meerdere watertypen</strong>
+          Klik niet alleen op de waterloop zelf, maar ook op plassen, natte modder en donkere natte zones langs oevers. Hoe gevarieerder de klikpunten, hoe breder de detectierange.
+        </div>
+        <div class="tip-box ok">
+          <strong>✓ Vergelijk methoden naast elkaar</strong>
+          Voer alle vier methoden tegelijk uit. Gebieden die door meerdere methoden worden gemarkeerd zijn betrouwbaarder als wateroverlast dan gebieden die maar door één methode worden herkend.
+        </div>
+        <div class="tip-box ok">
+          <strong>✓ Download voor nabewerking</strong>
+          De ⬇ PNG download geeft de overlay op volledige resolutie. Je kunt dit importeren in QGIS (als rasterlaag), ArcGIS, of Photoshop voor verdere analyse of digitalisering.
+        </div>
+        <div class="tip-box warn">
+          <strong>⚠️ Schaduwen vs. water</strong>
+          Donkere schaduwen van bomen of gebouwen kunnen worden verward met water, met name door RGB en HSV. Schaduwen hebben doorgaans meer textuur dan water. Verhoog de Max helderheid-parameter als er te veel schaduwgebieden worden gedetecteerd, of gebruik SAM3 dat beter onderscheid maakt op basis van regiogrenzen.
+        </div>
+        <div class="tip-box warn">
+          <strong>⚠️ Bestandsgrootte en geheugen</strong>
+          Voor RGB en HSV wordt de afbeelding op volledige resolutie verwerkt — dit kan traag zijn bij grote bestanden (&gt;20 MP). SAM3 en HSV-SAM3 schalen de afbeelding naar 512px voor de API-aanroep. Bij geheugenfouten in de browser: laad een verkleinde afbeelding in.
+        </div>
+        <div class="tip-box info">
+          <strong>💡 Opnieuw analyseren na aanpassing</strong>
+          Pas je klikpunten of parameters aan en klik opnieuw op <em>Analyseer</em> — alle actieve methoden worden opnieuw uitgevoerd met de nieuwe instellingen. De vorige resultaten worden overschreven.
+        </div>
+        <div class="tip-box info">
+          <strong>💡 Claude Vision analyse</strong>
+          Onderaan de resultaten verschijnt een tekstuele analyse van Claude Vision. Deze vergelijkt de gebruikte methoden, beschrijft het watertype en geeft een risicobeoordeling. De analyse wordt ook per run vernieuwd bij <em>Opnieuw analyseren</em>.
+        </div>
+      </div>
+
+      <!-- ── Onnauwkeurigheden ─────────────────────────────────────────── -->
+      <div class="guide-section" id="tab-limits">
+
+        <h3>⚠️ Waarom onnauwkeurigheden belangrijk zijn</h3>
+        <p>WaterScan is een <strong>ondersteunend hulpmiddel</strong>, geen gecertificeerd meetsysteem. De resultaten zijn gebaseerd op kleuranalyse en taalmodelredenering — beide hebben fundamentele beperkingen. Besluiten over evacuaties, dijkversterkingen of schadevaststellingen mogen <strong>nooit uitsluitend op deze tool worden gebaseerd</strong> zonder validatie door een vakspecialist of aanvullende meetdata.</p>
+
+        <div class="tip-box warn" style="margin-bottom:20px">
+          <strong>⚠️ Gebruik als eerste verkenning, niet als eindoordeel</strong>
+          De tool is bedoeld om snel een indicatie te geven van waar wateroverlast <em>mogelijk</em> aanwezig is, zodat veldwerk of nadere analyse gerichter kan worden ingezet. Het vervangen van veldmetingen of hydrologisch onderzoek is buiten de scope van deze applicatie.
+        </div>
+
+        <h3>📷 Onnauwkeurigheden door de afbeelding zelf</h3>
+
+        <div class="method-row" style="border-color:rgba(239,68,68,0.25);background:rgba(239,68,68,0.05)">
+          <span class="method-badge-g" style="background:rgba(239,68,68,0.15);color:#fca5a5;min-width:80px;text-align:center">Belichting</span>
+          <p><strong>Wisselende lichtomstandigheden veranderen pixelwaarden fundamenteel.</strong> Dezelfde waterzone op een bewolkte dag versus een zonnige dag geeft andere R/G/B en HSV-waarden, waardoor drempelwaarden die op het ene beeld werken op een ander beeld falen. Kalibreer de klikpunten altijd op de specifieke afbeelding die je analyseert — gebruik nooit opgeslagen ranges van een eerder beeld.</p>
+        </div>
+
+        <div class="method-row" style="border-color:rgba(239,68,68,0.25);background:rgba(239,68,68,0.05)">
+          <span class="method-badge-g" style="background:rgba(239,68,68,0.15);color:#fca5a5;min-width:80px;text-align:center">Schaduwen</span>
+          <p><strong>Donkere schaduwen van bomen, gebouwen en dijklichamen hebben bijna identieke kleurwaarden als modderig water.</strong> Een schaduw op droge grond heeft lage V (helderheid) en lage S (verzadiging) — exact het profiel van neerslagwater. RGB en HSV kunnen dit structureel niet onderscheiden. SAM3 doet het beter via regiogrenzen, maar is ook niet onfeilbaar. Controleer alle gedetecteerde zones altijd visueel op het originele beeld.</p>
+        </div>
+
+        <div class="method-row" style="border-color:rgba(239,68,68,0.25);background:rgba(239,68,68,0.05)">
+          <span class="method-badge-g" style="background:rgba(239,68,68,0.15);color:#fca5a5;min-width:80px;text-align:center">Natte grond</span>
+          <p><strong>Natte maar niet overstroomde grond ziet er visueel bijna hetzelfde uit als oppervlaktewater.</strong> Vochtige kleigrond na regen heeft een donkerbruin uiterlijk dat de tool als wateroverlast classificeert. Technisch gezien is dit geen fout — natte bodem is relevant bij wateroverlast — maar het oppervlaktepercentage overschat de diepte en ernst van de inundatie.</p>
+        </div>
+
+        <div class="method-row" style="border-color:rgba(239,68,68,0.25);background:rgba(239,68,68,0.05)">
+          <span class="method-badge-g" style="background:rgba(239,68,68,0.15);color:#fca5a5;min-width:80px;text-align:center">Camerahoek</span>
+          <p><strong>Droneopnames zijn zelden exact loodrecht.</strong> Een schuine hoek vervormt de schijnbare omvang van watergebieden: verder weg lijkende zones worden kleiner weergegeven dan even grote zones dichtbij. Het gerapporteerde wateroppervlak in megapixels is daardoor geen betrouwbare maat voor de werkelijke geïnundeerde oppervlakte in m² of ha zonder orthorectificatie.</p>
+        </div>
+
+        <div class="method-row" style="border-color:rgba(239,68,68,0.25);background:rgba(239,68,68,0.05)">
+          <span class="method-badge-g" style="background:rgba(239,68,68,0.15);color:#fca5a5;min-width:80px;text-align:center">JPEG-artefacten</span>
+          <p><strong>JPEG-compressie introduceert kleurartefacten langs scherpe randen</strong> (blokvormige patronen, kleuruitlopers). Dit kan ertoe leiden dat pixels op de rand van een waterzone de verkeerde kleurwaarden hebben, waardoor de rand van het gedetecteerde gebied rafelig of te breed uitvalt. Gebruik PNG-bronbestanden waar mogelijk voor de meest nauwkeurige resultaten.</p>
+        </div>
+
+        <h3>🔬 Methodologische beperkingen per methode</h3>
+
+        <div class="method-row">
+          <span class="method-badge-g" style="background:rgba(59,130,246,0.15);color:#93c5fd">RGB</span>
+          <p><strong>Geen scheiding van kleur en helderheid.</strong> Als de belichting verandert (bijv. wolk schuift voor de zon), veranderen R, G en B alle drie tegelijk. Een range die op één beeldgedeelte werkt, werkt daardoor niet automatisch op een ander deel van hetzelfde beeld bij variabele belichting. Bovendien detecteert RGB alleen pixels die exact binnen de aangeleerde range vallen — er is geen begrip van context of buurpixels.</p>
+        </div>
+
+        <div class="method-row">
+          <span class="method-badge-g" style="background:rgba(20,184,166,0.15);color:#5eead4">HSV</span>
+          <p><strong>De hue-component is instabiel bij zeer donkere pixels.</strong> Wanneer V (helderheid) dicht bij nul is, wordt H mathematisch onbepaald — een bijna-zwarte pixel kan elke tintwaarde hebben afhankelijk van minimale ruis. Dit betekent dat de meest donkere waterzones (de kern van een diepe waterloop) soms buiten de H-range vallen, terwijl lichtere randgebieden wel worden herkend. Het water wordt dan "ringvormig" gedetecteerd in plaats van volledig gevuld.</p>
+        </div>
+
+        <div class="method-row">
+          <span class="method-badge-g" style="background:rgba(168,85,247,0.15);color:#d8b4fe">AI Scan</span>
+          <p><strong>Lage rasterresolutie (32×32) en taalmodel-onzekerheid.</strong> Het masker heeft een effectieve resolutie van 32×32 cellen over het hele beeld — smalle waterlopen smaller dan ~3% van de beeldbreedte passen mogelijk niet in één cel en worden gemist. Bovendien is Claude een taalmodel dat de afbeelding interpreteert: het kan fouten maken, inconsistent zijn tussen runs met dezelfde afbeelding, of water verwarren met andere donkere objecten. De output is niet deterministisch — twee identieke analyses kunnen licht afwijkende maskers opleveren.</p>
+        </div>
+
+        <div class="method-row">
+          <span class="method-badge-g" style="background:rgba(245,158,11,0.15);color:#fcd34d">Segmenteren</span>
+          <p><strong>Combineert de beperkingen van beide methoden.</strong> Als de HSV-drempel te streng is, worden watergebieden niet als kandidaat doorgegeven aan SAM3 en dus niet verfijnd. Als de klikpunten niet representatief zijn voor alle watertypen in het beeld, mist HSV-SAM2 dezelfde zones als de pure HSV-methode. Bovendien is de intersectie van HSV en SAM2 conservatief: gebieden die SAM3 correct herkent maar HSV mist, worden door de intersectie alsnog uitgesloten.</p>
+        </div>
+
+        <h3>📏 Waarom de statistieken voorzichtig geïnterpreteerd moeten worden</h3>
+
+        <div class="method-row" style="border-color:rgba(239,68,68,0.25);background:rgba(239,68,68,0.05)">
+          <span class="method-badge-g" style="background:rgba(239,68,68,0.15);color:#fca5a5;min-width:80px;text-align:center">Waterdekking %</span>
+          <p><strong>Dit percentage geeft het aandeel van beeldpixels weer, niet van het werkelijke grondoppervlak.</strong> Een beeld dat voor 60% uit droog grasland bestaat en voor 40% uit een waterloop geeft een waterdekking van ~40% — maar als de drone schuin over de waterloop vloog, is de werkelijke overstromingsoppervlakte veel kleiner. Zonder GIS-kalibratie (Ground Sampling Distance, orthorectificatie) is dit getal niet te vertalen naar hectaren.</p>
+        </div>
+
+        <div class="method-row" style="border-color:rgba(239,68,68,0.25);background:rgba(239,68,68,0.05)">
+          <span class="method-badge-g" style="background:rgba(239,68,68,0.15);color:#fca5a5;min-width:80px;text-align:center">Risicoscore</span>
+          <p><strong>De drempelwaarden Laag/Matig/Hoog zijn arbitrair en niet gevalideerd.</strong> De grenzen (10% en 25%) zijn vastgesteld als redelijke indicatoren voor een typisch drone-beeld van een waterloop, maar zijn niet gebaseerd op hydrologische normen of empirisch onderzoek. Een score van "Hoog" betekent dat meer dan 25% van het beeld als water is geclassificeerd — niet dat er een gevaarlijke situatie is.</p>
+        </div>
+
+        <div class="method-row" style="border-color:rgba(239,68,68,0.25);background:rgba(239,68,68,0.05)">
+          <span class="method-badge-g" style="background:rgba(239,68,68,0.15);color:#fca5a5;min-width:80px;text-align:center">Vergelijking</span>
+          <p><strong>Resultaten van verschillende methoden zijn niet direct vergelijkbaar.</strong> SAM3 werkt op 512px-resolutie, RGB en HSV op volledige resolutie. Een waterdekking van 12% bij HSV en 18% bij SAM2 voor hetzelfde beeld zegt niets over welke methode "correcter" is zonder een gevalideerde grondwaarheid (ground truth). Gebruik de overlap tussen methoden als maat voor betrouwbaarheid, niet de absolute percentages.</p>
+        </div>
+
+        <div class="tip-box warn" style="margin-top:8px">
+          <strong>⚠️ Geen vervanging voor veldwerk of hydrologisch onderzoek</strong>
+          WaterScan geeft een visuele en kwalitatieve indicatie van wateroverlast op basis van kleur en AI-redenering. Voor kwantitatieve uitspraken over waterdiepte, debiet, of precieze overstromingsoppervlakte is aanvullend veldwerk, LiDAR-data, of hydrologisch modelleren noodzakelijk. De tool is ontworpen als hulpmiddel voor verkenning en prioritering, niet als vervanging van professionele hydrologische analyse.
+        </div>
+
+      </div>
+
+    </div><!-- /.guide-body -->
+  </div><!-- /.guide-box -->
+</div><!-- /#guideModal -->
+
+<script>
+function switchTab(name) {
+  document.querySelectorAll('.guide-tab').forEach((t,i) => {
+    const tabs = ['start','methods','sampler','sam2','params','tips','limits'];
+    t.classList.toggle('active', tabs[i] === name);
+  });
+  document.querySelectorAll('.guide-section').forEach(s => {
+    s.classList.toggle('active', s.id === 'tab-'+name);
+  });
+}
+// Close on backdrop click
+document.getElementById('guideModal').addEventListener('click', function(e) {
+  if (e.target === this) this.style.display = 'none';
+});
+</script>
+</body>
+</html>
