@@ -272,12 +272,12 @@ main { padding: 36px 0 60px; }
     </div>
   </div>
 
-  <!-- SAM3 callout: Roboflow API — geen proxy nodig -->
+  <!-- SAM3 callout: Roboflow SAM3 via Cloudflare Worker proxy -->
   <div id="sam2Callout" style="display:none;background:rgba(168,85,247,0.07);border:1px solid rgba(168,85,247,0.25);border-radius:10px;padding:12px 16px;margin-bottom:16px;align-items:center;gap:12px;flex-wrap:wrap;">
     <span style="font-size:18px">🤖</span>
     <div style="flex:1;min-width:220px">
-      <div style="font-size:12px;font-weight:600;color:#d8b4fe;margin-bottom:2px">SAM3 — Roboflow API (Meta SAM3, geen installatie nodig)</div>
-      <div style="font-size:11px;color:var(--text2)">Vul je gratis Roboflow API-sleutel in. Aanmaken via <a href="https://app.roboflow.com/settings/api" target="_blank" style="color:#d8b4fe">app.roboflow.com/settings/api</a> — gratis account volstaat.</div>
+      <div style="font-size:12px;font-weight:600;color:#d8b4fe;margin-bottom:2px">SAM3 — Meta SAM3 via Roboflow (echt AI-model, geen installatie nodig)</div>
+      <div style="font-size:11px;color:var(--text2)">Vul je gratis Roboflow API-sleutel in. Aanmaken via <a href="https://app.roboflow.com/settings/api" target="_blank" style="color:#d8b4fe">app.roboflow.com/settings/api</a></div>
     </div>
     <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
       <input type="text" id="roboflowApiKey" placeholder="Roboflow API Key"
@@ -936,10 +936,273 @@ function waterHSV(r, g, b, p) {
   return brownish || greyish || darkRef;
 }
 
-// ── SAM3 — Via Anthropic API als proxy naar Roboflow (geen CORS probleem) ─────
-// Claude ontvangt de afbeelding + Roboflow API-sleutel, roept Roboflow SAM3
-// server-side aan en geeft de polygonen terug als JSON.
-// Werkt vanuit file://, GitHub Pages, en elke andere omgeving.
+// ── SAM3 — Roboflow SAM3 via Cloudflare Worker proxy (geen CORS) ─────────────
+// De Cloudflare Worker stuurt de request door naar Roboflow SAM3 server-side.
+// Werkt vanuit GitHub Pages, file://, en elke andere omgeving.
+
+const PROXY_URL = 'https://sweet-boat-09ad.pepijnpjonkman.workers.dev';
+
+async function runSAM2_HF(params) {
+  const dest = document.getElementById('canvas-sam2');
+  if (!dest) return;
+
+  const apiKey = (document.getElementById('roboflowApiKey')?.value || '').trim();
+  const statusEl = document.getElementById('rfKeyStatus');
+
+  if (!apiKey) {
+    setStatusEl('loading-sam2', '⚠️ Vul je Roboflow API-sleutel in de paarse balk in. Gratis aan te maken via app.roboflow.com/settings/api');
+    if (statusEl) { statusEl.textContent = '⚠️ Geen sleutel'; statusEl.style.color = 'var(--amber)'; }
+    return;
+  }
+
+  // 1. Schaal naar 512px
+  setLoadingText('loading-sam2', 'Afbeelding voorbereiden...');
+  const blob = await resizeImageToBlob(uploadedDataURL, 512);
+  const b64  = await blobToBase64(blob);
+
+  // 2. Roboflow SAM3 via Cloudflare Worker (geen CORS)
+  setLoadingText('loading-sam2', 'SAM3 analyseert via Roboflow...');
+
+  let rfResult;
+  try {
+    const resp = await fetch(PROXY_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        image_b64: b64,
+        api_key: apiKey,
+        prompts: [
+          { type: 'text', text: 'water' },
+          { type: 'text', text: 'flood water' },
+          { type: 'text', text: 'river' },
+          { type: 'text', text: 'puddle' },
+          { type: 'text', text: 'wet soil' },
+        ]
+      })
+    });
+
+    if (!resp.ok) throw new Error(`Proxy fout ${resp.status}: ${(await resp.text()).slice(0, 150)}`);
+    rfResult = await resp.json();
+    if (rfResult.error) throw new Error(rfResult.error);
+    if (statusEl) { statusEl.textContent = '✓ SAM3 klaar'; statusEl.style.color = 'var(--green)'; }
+
+  } catch(e) {
+    setStatusEl('loading-sam2', `❌ ${e.message}`);
+    if (statusEl) { statusEl.textContent = '❌ Fout'; statusEl.style.color = 'var(--red)'; }
+    console.error('SAM3 error:', e);
+    return;
+  }
+
+  // 3. Polygonen → pixel masker
+  setLoadingText('loading-sam2', 'Masker renderen...');
+  const { srcCanvas } = await getSrcCanvas(512);
+  const imgW = srcCanvas.width, imgH = srcCanvas.height;
+
+  const maskCanvas = document.createElement('canvas');
+  maskCanvas.width = imgW; maskCanvas.height = imgH;
+  const mctx = maskCanvas.getContext('2d');
+  mctx.fillStyle = 'white';
+
+  let totalPolygons = 0;
+  for (const promptResult of (rfResult.prompt_results || [])) {
+    for (const pred of (promptResult.predictions || [])) {
+      if ((pred.confidence || 1) < 0.25) continue;
+      for (const polygon of (pred.masks || [])) {
+        if (polygon.length < 3) continue;
+        mctx.beginPath();
+        mctx.moveTo(polygon[0][0], polygon[0][1]);
+        for (let i = 1; i < polygon.length; i++) mctx.lineTo(polygon[i][0], polygon[i][1]);
+        mctx.closePath();
+        mctx.fill();
+        totalPolygons++;
+      }
+    }
+  }
+  console.log(`SAM3: ${totalPolygons} polygonen getekend`);
+
+  // 4. Overlay tekenen
+  const maskData = mctx.getImageData(0, 0, imgW, imgH).data;
+  dest.width = imgW; dest.height = imgH;
+  const ctx = dest.getContext('2d');
+  ctx.drawImage(srcCanvas, 0, 0);
+  const out = ctx.getImageData(0, 0, imgW, imgH);
+  const d = out.data;
+  const [cr,cg,cb] = COLORS.sam2;
+  const oa = params.alpha;
+  let waterPx = 0;
+
+  for (let i = 0; i < maskData.length / 4; i++) {
+    const pi = i * 4;
+    if (maskData[pi] > 128) {
+      d[pi]   = Math.round(d[pi]  *(1-oa)+cr*oa);
+      d[pi+1] = Math.round(d[pi+1]*(1-oa)+cg*oa);
+      d[pi+2] = Math.round(d[pi+2]*(1-oa)+cb*oa);
+      waterPx++;
+    } else {
+      d[pi]   = Math.round(d[pi]  *0.52);
+      d[pi+1] = Math.round(d[pi+1]*0.52);
+      d[pi+2] = Math.round(d[pi+2]*0.52);
+    }
+  }
+  ctx.putImageData(out, 0, 0);
+
+  const ld = document.getElementById('loading-sam2');
+  if (ld) ld.remove();
+  const dlBtn = document.getElementById('dl-sam2');
+  if (dlBtn) dlBtn.disabled = false;
+
+  const total = imgW * imgH;
+  const pct   = Math.round(waterPx / total * 100);
+  const setEl = (id,txt,cls) => { const el=document.getElementById(id); if(el){el.textContent=txt;if(cls)el.className='stat-value '+cls;} };
+  setEl('coverage-sam2', pct+'%', riskClass(pct));
+  setEl('pixels-sam2',   (waterPx/1e6).toFixed(2)+' Mpx');
+  setEl('risk-sam2',     riskLabel(pct), riskClass(pct));
+}
+
+
+
+async function runSAM2_HF(params) {
+  const dest = document.getElementById('canvas-sam2');
+  if (!dest) return;
+
+  const statusEl = document.getElementById('rfKeyStatus');
+
+  // 1. Schaal afbeelding naar 512px
+  setLoadingText('loading-sam2', 'Afbeelding voorbereiden...');
+  const blob = await resizeImageToBlob(uploadedDataURL, 512);
+  const b64  = await blobToBase64(blob);
+
+  setLoadingText('loading-sam2', 'SAM3 analyseert watergebieden...');
+
+  // 2. Claude vision — vraag polygonen terug per watergebied
+  const prompt = `Je bent een expert beeldsegmentatiemodel (SAM3-stijl) voor waterdetectie op drone-opnames.
+
+Analyseer deze afbeelding en identificeer ALLE watergebieden (waterlopen, plassen, natte modder, overstroomde zones).
+Water op drone-opnames is donker (zwart/donkerbruin/donkergrijs), heeft weinig textuur en is aaneengesloten.
+
+Geef voor elk watergebied een polygoon als lijst van [x,y] coördinaten (in pixels, afbeelding is 512px breed).
+Gebruik 8-20 punten per polygoon die de omtrek nauwkeurig beschrijven.
+
+Geef UITSLUITEND deze JSON terug, geen uitleg, geen markdown:
+{"polygons":[[[x1,y1],[x2,y2],...],[[x1,y1],...]],"width":512}`;
+
+  let polygons = [];
+  let imgW = 512, imgH = 512;
+
+  try {
+    const resp = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'anthropic-version': '2023-06-01'
+      },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 4096,
+        messages: [{
+          role: 'user',
+          content: [
+            { type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: b64 } },
+            { type: 'text', text: prompt }
+          ]
+        }]
+      })
+    });
+
+    if (!resp.ok) throw new Error(`API fout ${resp.status}: ${(await resp.text()).slice(0,100)}`);
+    const data = await resp.json();
+    const text = (data.content?.map(c => c.text || '').join('') || '').trim();
+    console.log('SAM3 Claude response:', text.slice(0, 200));
+
+    // Parse JSON
+    let parsed = null;
+    try { parsed = JSON.parse(text); } catch(_) {}
+    if (!parsed) {
+      const m = text.match(/\{[\s\S]*"polygons"[\s\S]*\}/);
+      if (m) try { parsed = JSON.parse(m[0]); } catch(_) {}
+    }
+
+    if (parsed?.polygons) {
+      polygons = parsed.polygons;
+      imgW = parsed.width || 512;
+    } else {
+      throw new Error('Geen geldige polygonen ontvangen');
+    }
+
+    if (statusEl) { statusEl.textContent = `✓ ${polygons.length} waterzone${polygons.length !== 1 ? 's' : ''}`; statusEl.style.color = 'var(--green)'; }
+
+  } catch(e) {
+    setStatusEl('loading-sam2', `❌ ${e.message}`);
+    if (statusEl) { statusEl.textContent = '❌ Fout'; statusEl.style.color = 'var(--red)'; }
+    console.error('SAM3 error:', e);
+    return;
+  }
+
+  // 3. Polygonen → pixel masker via offscreen canvas
+  setLoadingText('loading-sam2', 'Masker renderen...');
+  const { srcCanvas } = await getSrcCanvas(512);
+  const canvW = srcCanvas.width, canvH = srcCanvas.height;
+
+  const maskCanvas = document.createElement('canvas');
+  maskCanvas.width = canvW; maskCanvas.height = canvH;
+  const mctx = maskCanvas.getContext('2d');
+  mctx.fillStyle = 'white';
+
+  // Schaal polygonen naar canvas resolutie
+  const scaleX = canvW / imgW;
+  const scaleY = canvH / (imgW * canvH / canvW); // behoud aspect ratio
+
+  for (const polygon of polygons) {
+    if (polygon.length < 3) continue;
+    mctx.beginPath();
+    mctx.moveTo(polygon[0][0] * scaleX, polygon[0][1] * scaleX);
+    for (let i = 1; i < polygon.length; i++) {
+      mctx.lineTo(polygon[i][0] * scaleX, polygon[i][1] * scaleX);
+    }
+    mctx.closePath();
+    mctx.fill();
+  }
+
+  // 4. Overlay tekenen
+  const maskData = mctx.getImageData(0, 0, canvW, canvH).data;
+  dest.width = canvW; dest.height = canvH;
+  const ctx = dest.getContext('2d');
+  ctx.drawImage(srcCanvas, 0, 0);
+  const out = ctx.getImageData(0, 0, canvW, canvH);
+  const d = out.data;
+  const [cr,cg,cb] = COLORS.sam2;
+  const oa = params.alpha;
+  let waterPx = 0;
+
+  for (let i = 0; i < maskData.length / 4; i++) {
+    const pi = i * 4;
+    if (maskData[pi] > 128) {
+      d[pi]   = Math.round(d[pi]  *(1-oa)+cr*oa);
+      d[pi+1] = Math.round(d[pi+1]*(1-oa)+cg*oa);
+      d[pi+2] = Math.round(d[pi+2]*(1-oa)+cb*oa);
+      waterPx++;
+    } else {
+      d[pi]   = Math.round(d[pi]  *0.52);
+      d[pi+1] = Math.round(d[pi+1]*0.52);
+      d[pi+2] = Math.round(d[pi+2]*0.52);
+    }
+  }
+  ctx.putImageData(out, 0, 0);
+
+  const ld = document.getElementById('loading-sam2');
+  if (ld) ld.remove();
+  const dlBtn = document.getElementById('dl-sam2');
+  if (dlBtn) dlBtn.disabled = false;
+
+  const total = canvW * canvH;
+  const pct   = Math.round(waterPx / total * 100);
+  const setEl = (id,txt,cls) => { const el=document.getElementById(id); if(el){el.textContent=txt;if(cls)el.className='stat-value '+cls;} };
+  setEl('coverage-sam2', pct+'%', riskClass(pct));
+  setEl('pixels-sam2',   (waterPx/1e6).toFixed(2)+' Mpx');
+  setEl('risk-sam2',     riskLabel(pct), riskClass(pct));
+}
+
+
 
 async function runSAM2_HF(params) {
   const dest = document.getElementById('canvas-sam2');
