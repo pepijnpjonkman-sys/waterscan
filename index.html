@@ -250,6 +250,44 @@ main { padding: 36px 0 60px; }
     <p style="margin-top:6px;font-size:12px;color:var(--text3)">Geoptimaliseerd voor donker modderig neerslagwater</p>
   </div>
 
+  <!-- Stap 1b: Referentieafbeelding laden (optioneel) -->
+  <div id="refUploadSection" style="display:none;margin-top:12px">
+    <div class="section-label" style="margin-bottom:8px">Stap 1b — Referentieafbeelding laden (optioneel)</div>
+    <input type="file" id="refFileInput" accept="image/*" style="display:none" onchange="loadRefImage(event)">
+    <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+      <div id="refDropZone" onclick="document.getElementById('refFileInput').click()"
+        style="flex:1;min-width:200px;border:2px dashed var(--border2);border-radius:12px;padding:14px 18px;cursor:pointer;display:flex;align-items:center;gap:12px;transition:all 0.2s;background:var(--bg2)"
+        onmouseover="this.style.borderColor='rgba(34,197,94,0.4)'"
+        onmouseout="this.style.borderColor='var(--border2)'">
+        <span style="font-size:24px">📐</span>
+        <div>
+          <div style="font-size:12px;font-weight:600;color:var(--text);margin-bottom:2px">Referentieafbeelding met ingetekende zones</div>
+          <div style="font-size:11px;color:var(--text2)">Dezelfde afbeelding met handmatig gesegmenteerde omlijningen — voor nauwkeurigheidsvergelijking</div>
+        </div>
+        <div id="refFileName" style="font-size:11px;color:var(--text3);margin-left:auto"></div>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <div style="font-size:11px;color:var(--text2)">Omlijningskleur:</div>
+        <div style="display:flex;gap:6px">
+          <button onclick="setRefColor('yellow')" id="refColorYellow"
+            style="padding:4px 10px;border-radius:6px;border:2px solid rgba(234,179,8,0.6);background:rgba(234,179,8,0.15);color:#fcd34d;font-size:11px;cursor:pointer;font-family:'Space Grotesk',sans-serif">Geel</button>
+          <button onclick="setRefColor('red')" id="refColorRed"
+            style="padding:4px 10px;border-radius:6px;border:1px solid var(--border2);background:transparent;color:var(--text2);font-size:11px;cursor:pointer;font-family:'Space Grotesk',sans-serif">Rood</button>
+          <button onclick="setRefColor('blue')" id="refColorBlue"
+            style="padding:4px 10px;border-radius:6px;border:1px solid var(--border2);background:transparent;color:var(--text2);font-size:11px;cursor:pointer;font-family:'Space Grotesk',sans-serif">Blauw</button>
+          <button onclick="setRefColor('white')" id="refColorWhite"
+            style="padding:4px 10px;border-radius:6px;border:1px solid var(--border2);background:transparent;color:var(--text2);font-size:11px;cursor:pointer;font-family:'Space Grotesk',sans-serif">Wit</button>
+          <button onclick="setRefColor('auto')" id="refColorAuto"
+            style="padding:4px 10px;border-radius:6px;border:1px solid var(--border2);background:transparent;color:var(--text2);font-size:11px;cursor:pointer;font-family:'Space Grotesk',sans-serif">Automatisch</button>
+        </div>
+        <button onclick="clearRefImage()" id="refClearBtn" style="display:none;padding:4px 10px;border-radius:6px;border:1px solid var(--border2);background:transparent;color:var(--text3);font-size:11px;cursor:pointer;font-family:'Space Grotesk',sans-serif">✕ Wis</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Vergelijkingspaneel -->
+  <div id="refComparePanel" style="display:none;margin-top:16px;background:var(--bg2);border:1px solid var(--border);border-radius:14px;padding:20px"></div>
+
   <div class="tuning-panel" id="tuningPanel" style="display:none">
     <h4>Detectie-parameters</h4>
     <div class="tuning-grid">
@@ -493,6 +531,7 @@ function loadImage(file) {
       <p style="margin-top:10px;color:var(--text2);font-size:13px;">📁 ${file.name}</p>
       <p style="color:var(--text3);font-size:12px;">Klik om te wisselen</p>`;
     document.getElementById('tuningPanel').style.display = '';
+    document.getElementById('refUploadSection').style.display = '';
     updateSamplerCallout();
     updateSAM2Callout();
     updateHSVSAM2Callout();
@@ -1356,7 +1395,235 @@ function drawHsvSam2Points(ctx) {
   });
 }
 
-// ── Teken contour langs masker-rand ──────────────────────────────────────────
+// ── Referentieafbeelding & nauwkeurigheidsvergelijking ────────────────────────
+let refDataURL = null;
+let refColor = 'yellow';
+let refMaskCache = null;
+
+function setRefColor(color) {
+  refColor = color;
+  // Update button styles
+  ['yellow','red','blue','white','auto'].forEach(c => {
+    const btn = document.getElementById('refColor' + c.charAt(0).toUpperCase() + c.slice(1));
+    if (!btn) return;
+    if (c === color) {
+      btn.style.borderColor = 'rgba(34,197,94,0.6)';
+      btn.style.background  = 'rgba(34,197,94,0.15)';
+      btn.style.color       = '#86efac';
+    } else {
+      btn.style.borderColor = 'var(--border2)';
+      btn.style.background  = 'transparent';
+      btn.style.color       = 'var(--text2)';
+    }
+  });
+  refMaskCache = null; // reset cache
+  if (refDataURL) runRefComparison();
+}
+
+function loadRefImage(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    refDataURL = e.target.result;
+    refMaskCache = null;
+    document.getElementById('refFileName').textContent = file.name;
+    document.getElementById('refClearBtn').style.display = '';
+    runRefComparison();
+  };
+  reader.readAsDataURL(file);
+}
+
+function clearRefImage() {
+  refDataURL = null; refMaskCache = null;
+  document.getElementById('refFileName').textContent = '';
+  document.getElementById('refClearBtn').style.display = 'none';
+  document.getElementById('refComparePanel').style.display = 'none';
+  document.getElementById('refFileInput').value = '';
+}
+
+// Detecteer omlijningspixels op kleur en vul zones in via flood-fill
+async function buildRefMask(dataURL) {
+  return new Promise(resolve => {
+    const img = new Image();
+    img.onload = () => {
+      const c = document.createElement('canvas');
+      c.width = img.naturalWidth; c.height = img.naturalHeight;
+      const ctx = c.getContext('2d');
+      ctx.drawImage(img, 0, 0);
+      const { data } = ctx.getImageData(0, 0, c.width, c.height);
+      const W = c.width, H = c.height;
+
+      // Detecteer omlijningspixels
+      const outline = new Uint8Array(W * H);
+
+      function matchColor(r, g, b) {
+        switch(refColor) {
+          case 'yellow': return g > 150 && r > 150 && b < 100 && Math.abs(r-g) < 80;
+          case 'red':    return r > 150 && g < 100 && b < 100;
+          case 'blue':   return b > 150 && r < 100 && g < 100;
+          case 'white':  return r > 200 && g > 200 && b > 200;
+          case 'auto': {
+            // Vind meest afwijkende kleur van gemiddeld beeldgrijs
+            const brightness = (r + g + b) / 3;
+            const saturation = Math.max(r,g,b) - Math.min(r,g,b);
+            return saturation > 60 || brightness > 220 || (r > 180 && g > 180 && b < 80);
+          }
+        }
+        return false;
+      }
+
+      for (let i = 0; i < data.length; i += 4) {
+        if (matchColor(data[i], data[i+1], data[i+2])) {
+          outline[i/4] = 1;
+        }
+      }
+
+      // Vul ingesloten zones via scanline flood-fill vanuit randen
+      // Alles wat NIET bereikbaar is vanaf de rand én binnen omlijning ligt = water
+      const visited = new Uint8Array(W * H);
+      const queue = [];
+
+      // Begin bij alle randpixels die geen omlijning zijn
+      for (let x = 0; x < W; x++) {
+        if (!outline[x]) { queue.push(x); visited[x] = 1; }
+        const b = (H-1)*W+x;
+        if (!outline[b]) { queue.push(b); visited[b] = 1; }
+      }
+      for (let y = 0; y < H; y++) {
+        if (!outline[y*W]) { queue.push(y*W); visited[y*W] = 1; }
+        const r = y*W+W-1;
+        if (!outline[r]) { queue.push(r); visited[r] = 1; }
+      }
+
+      // BFS
+      while (queue.length) {
+        const idx = queue.pop();
+        const x = idx % W, y = Math.floor(idx / W);
+        const neighbors = [
+          y > 0   ? idx - W : -1,
+          y < H-1 ? idx + W : -1,
+          x > 0   ? idx - 1 : -1,
+          x < W-1 ? idx + 1 : -1,
+        ];
+        for (const n of neighbors) {
+          if (n >= 0 && !visited[n] && !outline[n]) {
+            visited[n] = 1;
+            queue.push(n);
+          }
+        }
+      }
+
+      // Masker = pixels die niet bezocht zijn (ingesloten) + omlijning zelf
+      const mask = new Uint8Array(W * H);
+      let total = 0;
+      for (let i = 0; i < W * H; i++) {
+        if (!visited[i]) { mask[i] = 1; total++; }
+      }
+
+      resolve({ mask, W, H, total, outlineCount: outline.reduce((a,b)=>a+b,0) });
+    };
+    img.src = dataURL;
+  });
+}
+
+async function runRefComparison() {
+  if (!refDataURL || !uploadedDataURL) return;
+  const panel = document.getElementById('refComparePanel');
+  panel.style.display = '';
+  panel.innerHTML = `<div style="display:flex;align-items:center;gap:10px;padding:8px 0">
+    <div class="spinner"></div><span style="font-size:12px;color:var(--text2)">Referentieafbeelding analyseren...</span>
+  </div>`;
+
+  // Bouw referentiemasker
+  const ref = await buildRefMask(refDataURL);
+  if (ref.total < 10) {
+    panel.innerHTML = `<div style="color:var(--text3);font-size:13px;padding:8px">
+      ⚠️ Geen gesloten zones gevonden met kleur "<strong>${refColor}</strong>". 
+      Probeer een andere omlijningskleur of kies "Automatisch".
+    </div>`;
+    return;
+  }
+  refMaskCache = ref;
+
+  // Schaal referentiemasker naar 512px (zelfde als scanresultaten)
+  const refPct = Math.round(ref.total / (ref.W * ref.H) * 100);
+
+  // Haal scanresultaten op
+  const methods = [
+    { id: 'rgb',     label: 'RGB',                      color: '#3b82f6' },
+    { id: 'hsv',     label: 'HSV',                      color: '#14b8a6' },
+    { id: 'sam2',    label: 'AI Scan',                  color: '#a855f7' },
+    { id: 'hsv-sam2',label: 'Segmenteren n.a.v. punten',color: '#f59e0b' },
+  ];
+
+  const results = methods.map(m => {
+    const covEl = document.getElementById('coverage-' + m.id);
+    const pct = covEl && covEl.textContent !== '—' ? parseInt(covEl.textContent) || null : null;
+    return { ...m, pct };
+  }).filter(m => m.pct !== null);
+
+  // Bereken overeenkomst: verschil in percentage
+  const rows = results.map(m => {
+    const diff = Math.abs(m.pct - refPct);
+    const score = Math.max(0, 100 - diff * 2);
+    const scoreColor = score >= 80 ? '#86efac' : score >= 50 ? '#fcd34d' : '#fca5a5';
+    return { ...m, diff, score, scoreColor };
+  }).sort((a,b) => b.score - a.score);
+
+  // Render vergelijkingspaneel
+  const rowsHTML = rows.map(r => `
+    <div style="display:flex;align-items:center;gap:12px;padding:8px 0;border-bottom:1px solid var(--border)">
+      <span style="width:8px;height:8px;border-radius:50%;background:${r.color};display:inline-block;flex-shrink:0"></span>
+      <span style="flex:1;font-size:13px;color:var(--text)">${r.label}</span>
+      <span style="font-size:13px;color:var(--text2);min-width:50px;text-align:right">${r.pct}%</span>
+      <div style="width:120px;background:var(--bg3);border-radius:4px;height:6px;overflow:hidden">
+        <div style="width:${r.score}%;height:100%;background:${r.scoreColor};border-radius:4px;transition:width 0.4s"></div>
+      </div>
+      <span style="font-size:12px;font-weight:600;color:${r.scoreColor};min-width:36px;text-align:right">${r.score}%</span>
+    </div>`).join('');
+
+  const bestMatch = rows[0];
+
+  panel.innerHTML = `
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;flex-wrap:wrap">
+      <h3 style="font-family:'Syne',sans-serif;font-size:15px;font-weight:700;margin:0">📐 Nauwkeurigheidsvergelijking</h3>
+      <span style="font-size:11px;color:var(--text3);padding:3px 8px;background:var(--bg3);border-radius:6px;border:1px solid var(--border)">
+        Referentie: <strong style="color:var(--text)">${refPct}%</strong> van het beeld
+      </span>
+    </div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">
+      <div style="background:var(--bg3);border-radius:10px;padding:12px;border:1px solid var(--border)">
+        <div style="font-size:11px;color:var(--text2);margin-bottom:4px">Referentie wateroppervlak</div>
+        <div style="font-size:22px;font-weight:700;color:var(--text)">${refPct}%</div>
+        <div style="font-size:11px;color:var(--text3)">${ref.total.toLocaleString()} pixels · ${(ref.total/1e6).toFixed(2)} Mpx</div>
+      </div>
+      <div style="background:var(--bg3);border-radius:10px;padding:12px;border:1px solid var(--border)">
+        <div style="font-size:11px;color:var(--text2);margin-bottom:4px">Beste methode</div>
+        <div style="font-size:16px;font-weight:700;color:${bestMatch?.scoreColor || 'var(--text)'}">
+          ${bestMatch ? bestMatch.label : '—'}
+        </div>
+        <div style="font-size:11px;color:var(--text3)">${bestMatch ? `${bestMatch.score}% overeenkomst` : 'Geen scan resultaten'}</div>
+      </div>
+    </div>
+
+    <div style="font-size:11px;color:var(--text2);margin-bottom:8px;font-weight:500">
+      METHODE · GEDETECTEERD · OVEREENKOMSTSCORE
+    </div>
+    ${rowsHTML || '<div style="font-size:12px;color:var(--text3);padding:8px">Voer eerst een analyse uit om te vergelijken.</div>'}
+
+    <div style="margin-top:12px;padding:10px 12px;background:rgba(59,130,246,0.07);border:1px solid rgba(59,130,246,0.2);border-radius:8px;font-size:11px;color:var(--text2);line-height:1.6">
+      <strong style="color:var(--text)">ℹ️ Hoe werkt de score?</strong><br>
+      De overeenkomstscore vergelijkt het gedetecteerde waterpercentage van elke methode met het referentiepercentage. 
+      Een verschil van 0% geeft 100 score, elk procent verschil trekt 2 punten af. 
+      Score ≥80% = goede overeenkomst (groen), 50–79% = matig (geel), &lt;50% = slechte overeenkomst (rood).
+    </div>`;
+}
+
+// Trigger vergelijking na elke scan automatisch
+function triggerRefUpdate() { if (refDataURL) setTimeout(runRefComparison, 400); }
+
 function drawContour(ctx, maskPixels, W, H) {
   ctx.strokeStyle = '#f59e0b';
   ctx.lineWidth = 2;
@@ -1448,6 +1715,7 @@ function finishCard(method, maskArr, W, H) {
   setEl('coverage-'+method, pct+'%', riskClass(pct));
   setEl('pixels-'+method,   (waterPx/1e6).toFixed(2)+' Mpx');
   setEl('risk-'+method,     riskLabel(pct), riskClass(pct));
+  triggerRefUpdate();
 }
 function blobToBase64(blob) {
   return new Promise(resolve => {
