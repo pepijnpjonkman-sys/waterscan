@@ -1527,9 +1527,24 @@ function makeZoomable(wrapEl, canvasEl, onCanvasClick, onCanvasRightClick) {
 
   function clampPan() {
     const wW = wrapEl.clientWidth, wH = wrapEl.clientHeight;
-    const cW = canvasEl.width * zoom, cH = canvasEl.height * zoom;
-    panX = Math.min(0, Math.max(panX, wW - cW));
-    panY = Math.min(0, Math.max(panY, wH - cH));
+    // Geschaalde canvas afmetingen
+    const cW = canvasEl.offsetWidth  * zoom;
+    const cH = canvasEl.offsetHeight * zoom;
+
+    if (cW <= wW) {
+      // Canvas past in de breedte — centreer horizontaal
+      panX = (wW - cW) / 2;
+    } else {
+      // Canvas groter dan wrap — pan begrenzen zodat canvas altijd het scherm vult
+      panX = Math.min(0, Math.max(panX, wW - cW));
+    }
+
+    if (cH <= wH) {
+      // Canvas past in de hoogte — centreer verticaal
+      panY = (wH - cH) / 2;
+    } else {
+      panY = Math.min(0, Math.max(panY, wH - cH));
+    }
   }
 
   // Scroll = zoom naar muispositie
@@ -1550,9 +1565,12 @@ function makeZoomable(wrapEl, canvasEl, onCanvasClick, onCanvasRightClick) {
     wrapEl.style.cursor = zoom > 1 ? 'grab' : 'crosshair';
   }, { passive: false });
 
-  // Drag = pan (alleen als ingezoomd)
+  // Drag = pan
   wrapEl.addEventListener('mousedown', e => {
-    if (zoom <= 1 || e.button !== 0) return;
+    const cW = canvasEl.offsetWidth * zoom;
+    const cH = canvasEl.offsetHeight * zoom;
+    const canPan = cW > wrapEl.clientWidth || cH > wrapEl.clientHeight;
+    if (!canPan || e.button !== 0) return;
     isDragging = true;
     dragStartX = e.clientX; dragStartY = e.clientY;
     panStartX = panX; panStartY = panY;
@@ -1623,7 +1641,12 @@ function makeZoomable(wrapEl, canvasEl, onCanvasClick, onCanvasRightClick) {
 
   // Reset zoom functie
   return {
-    reset: () => { zoom = 1; panX = 0; panY = 0; applyTransform(); wrapEl.style.cursor = 'crosshair'; },
+    reset: () => {
+      zoom = 1; panX = 0; panY = 0;
+      clampPan();
+      applyTransform();
+      wrapEl.style.cursor = 'crosshair';
+    },
     getZoom: () => zoom
   };
 }
@@ -1919,7 +1942,11 @@ async function runRefComparison() {
   }
   refMaskCache = ref;
 
-  // Schaal referentiemasker naar 512px (zelfde als scanresultaten)
+  // Nu refMaskCache beschikbaar is: update statistieken van al afgeronde methoden
+  ['rgb','hsv','sam2','hsv-sam2'].forEach(m => {
+    const stored = storedMasks[m];
+    if (stored) updateComparisonStats(m, stored.mask, stored.W, stored.H);
+  });
   const refPct = parseFloat((ref.total / (ref.W * ref.H) * 100).toFixed(2));
 
   // Haal scanresultaten op
