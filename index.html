@@ -267,18 +267,8 @@ main { padding: 36px 0 60px; }
         <div id="refFileName" style="font-size:11px;color:var(--text3);margin-left:auto"></div>
       </div>
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-        <div style="font-size:11px;color:var(--text2)">Omlijningskleur:</div>
-        <div style="display:flex;gap:6px">
-          <button onclick="setRefColor('yellow')" id="refColorYellow"
-            style="padding:4px 10px;border-radius:6px;border:2px solid rgba(234,179,8,0.6);background:rgba(234,179,8,0.15);color:#fcd34d;font-size:11px;cursor:pointer;font-family:'Space Grotesk',sans-serif">Geel</button>
-          <button onclick="setRefColor('red')" id="refColorRed"
-            style="padding:4px 10px;border-radius:6px;border:1px solid var(--border2);background:transparent;color:var(--text2);font-size:11px;cursor:pointer;font-family:'Space Grotesk',sans-serif">Rood</button>
-          <button onclick="setRefColor('blue')" id="refColorBlue"
-            style="padding:4px 10px;border-radius:6px;border:1px solid var(--border2);background:transparent;color:var(--text2);font-size:11px;cursor:pointer;font-family:'Space Grotesk',sans-serif">Blauw</button>
-          <button onclick="setRefColor('white')" id="refColorWhite"
-            style="padding:4px 10px;border-radius:6px;border:1px solid var(--border2);background:transparent;color:var(--text2);font-size:11px;cursor:pointer;font-family:'Space Grotesk',sans-serif">Wit</button>
-          <button onclick="setRefColor('auto')" id="refColorAuto"
-            style="padding:4px 10px;border-radius:6px;border:1px solid var(--border2);background:transparent;color:var(--text2);font-size:11px;cursor:pointer;font-family:'Space Grotesk',sans-serif">Automatisch</button>
+        <div style="font-size:11px;color:var(--text2);padding:4px 10px;background:rgba(168,85,247,0.12);border:1px solid rgba(168,85,247,0.3);border-radius:6px">
+          🟣 Werkt alleen met <strong style="color:#d8b4fe">paarse omlijning</strong>
         </div>
         <button onclick="clearRefImage()" id="refClearBtn" style="display:none;padding:4px 10px;border-radius:6px;border:1px solid var(--border2);background:transparent;color:var(--text3);font-size:11px;cursor:pointer;font-family:'Space Grotesk',sans-serif">✕ Wis</button>
       </div>
@@ -1443,6 +1433,51 @@ function clearRefImage() {
 }
 
 // Detecteer omlijningspixels op kleur en vul zones in via flood-fill
+async function drawRefPreview(ref) {
+  await new Promise(r => setTimeout(r, 50));
+  const canvas = document.getElementById('refPreviewCanvas');
+  if (!canvas || !refDataURL) return;
+
+  const img = new Image();
+  img.onload = () => {
+    canvas.width  = img.naturalWidth;
+    canvas.height = img.naturalHeight;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(img, 0, 0);
+
+    const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const d = imgData.data;
+    const { mask, W, H } = ref;
+
+    for (let i = 0; i < W * H; i++) {
+      const pi = i * 4;
+      if (mask[i]) {
+        d[pi]   = Math.round(d[pi]   * 0.3 + 34  * 0.7);
+        d[pi+1] = Math.round(d[pi+1] * 0.3 + 197 * 0.7);
+        d[pi+2] = Math.round(d[pi+2] * 0.3 + 94  * 0.7);
+      } else {
+        d[pi]   = Math.round(d[pi]   * 0.45);
+        d[pi+1] = Math.round(d[pi+1] * 0.45);
+        d[pi+2] = Math.round(d[pi+2] * 0.45);
+      }
+    }
+    ctx.putImageData(imgData, 0, 0);
+
+    // Witte randlijn langs gedetecteerde zones
+    for (let y = 1; y < H - 1; y++) {
+      for (let x = 1; x < W - 1; x++) {
+        const i = y * W + x;
+        if (mask[i]) {
+          const isEdge = !mask[(y-1)*W+x] || !mask[(y+1)*W+x] ||
+                         !mask[y*W+(x-1)] || !mask[y*W+(x+1)];
+          if (isEdge) { ctx.fillStyle = 'rgba(255,255,255,0.9)'; ctx.fillRect(x, y, 1, 1); }
+        }
+      }
+    }
+  };
+  img.src = refDataURL;
+}
+
 async function buildRefMask(dataURL) {
   return new Promise(resolve => {
     const img = new Image();
@@ -1458,19 +1493,11 @@ async function buildRefMask(dataURL) {
       const outline = new Uint8Array(W * H);
 
       function matchColor(r, g, b) {
-        switch(refColor) {
-          case 'yellow': return g > 150 && r > 150 && b < 100 && Math.abs(r-g) < 80;
-          case 'red':    return r > 150 && g < 100 && b < 100;
-          case 'blue':   return b > 150 && r < 100 && g < 100;
-          case 'white':  return r > 200 && g > 200 && b > 200;
-          case 'auto': {
-            // Vind meest afwijkende kleur van gemiddeld beeldgrijs
-            const brightness = (r + g + b) / 3;
-            const saturation = Math.max(r,g,b) - Math.min(r,g,b);
-            return saturation > 60 || brightness > 220 || (r > 180 && g > 180 && b < 80);
-          }
-        }
-        return false;
+        // Paars = rood + blauw dominant, groen lager dan beide
+        // Detecteer zowel donker paars als licht/transparant paars
+        const isPurple = r > 80 && b > 80 && r > g + 20 && b > g + 20;
+        const isLightPurple = r > 150 && b > 150 && g < Math.min(r, b) - 15;
+        return isPurple || isLightPurple;
       }
 
       for (let i = 0; i < data.length; i += 4) {
@@ -1479,46 +1506,137 @@ async function buildRefMask(dataURL) {
         }
       }
 
-      // Vul ingesloten zones via scanline flood-fill vanuit randen
-      // Alles wat NIET bereikbaar is vanaf de rand én binnen omlijning ligt = water
-      const visited = new Uint8Array(W * H);
-      const queue = [];
+      // Vul ingesloten zones — twee passes:
+      // Pass 1: standaard flood-fill vanuit randen (werkt voor gesloten omlijningen)
+      // Pass 2: voor omlijningen die de beeldrand raken, zoek centroïden en vul van binnenuit
 
-      // Begin bij alle randpixels die geen omlijning zijn
-      for (let x = 0; x < W; x++) {
-        if (!outline[x]) { queue.push(x); visited[x] = 1; }
-        const b = (H-1)*W+x;
-        if (!outline[b]) { queue.push(b); visited[b] = 1; }
-      }
-      for (let y = 0; y < H; y++) {
-        if (!outline[y*W]) { queue.push(y*W); visited[y*W] = 1; }
-        const r = y*W+W-1;
-        if (!outline[r]) { queue.push(r); visited[r] = 1; }
-      }
-
-      // BFS
-      while (queue.length) {
-        const idx = queue.pop();
-        const x = idx % W, y = Math.floor(idx / W);
-        const neighbors = [
-          y > 0   ? idx - W : -1,
-          y < H-1 ? idx + W : -1,
-          x > 0   ? idx - 1 : -1,
-          x < W-1 ? idx + 1 : -1,
-        ];
-        for (const n of neighbors) {
-          if (n >= 0 && !visited[n] && !outline[n]) {
-            visited[n] = 1;
-            queue.push(n);
+      // Sluit kleine openingen in de omlijning (1px verdikking)
+      const closedOutline = new Uint8Array(outline);
+      for (let y = 1; y < H - 1; y++) {
+        for (let x = 1; x < W - 1; x++) {
+          if (outline[y * W + x]) {
+            closedOutline[(y-1)*W+x] = 1;
+            closedOutline[(y+1)*W+x] = 1;
+            closedOutline[y*W+(x-1)] = 1;
+            closedOutline[y*W+(x+1)] = 1;
           }
         }
       }
 
-      // Masker = pixels die niet bezocht zijn (ingesloten) + omlijning zelf
+      // Pass 1: flood-fill vanuit randen
+      const visited = new Uint8Array(W * H);
+      const queue = [];
+      for (let x = 0; x < W; x++) {
+        if (!closedOutline[x]) { queue.push(x); visited[x] = 1; }
+        const b = (H-1)*W+x;
+        if (!closedOutline[b]) { queue.push(b); visited[b] = 1; }
+      }
+      for (let y = 0; y < H; y++) {
+        if (!closedOutline[y*W]) { queue.push(y*W); visited[y*W] = 1; }
+        const r = y*W+W-1;
+        if (!closedOutline[r]) { queue.push(r); visited[r] = 1; }
+      }
+      while (queue.length) {
+        const idx = queue.pop();
+        const x = idx % W, y = Math.floor(idx / W);
+        for (const n of [idx-W, idx+W, idx-1, idx+1]) {
+          if (n >= 0 && n < W*H && !visited[n] && !closedOutline[n]) {
+            visited[n] = 1; queue.push(n);
+          }
+        }
+      }
+
+      // Masker na pass 1
       const mask = new Uint8Array(W * H);
       let total = 0;
       for (let i = 0; i < W * H; i++) {
         if (!visited[i]) { mask[i] = 1; total++; }
+      }
+
+      // Pass 2: vind omlijningssegmenten en vul van binnenuit
+      // Zoek voor elke cluster van omlijningspixels een binnenpunt en flood-fill
+      const outlineVisited = new Uint8Array(W * H);
+      for (let y = 2; y < H - 2; y++) {
+        for (let x = 2; x < W - 2; x++) {
+          if (!closedOutline[y*W+x] || outlineVisited[y*W+x]) continue;
+
+          // BFS om deze cluster te vinden
+          const cluster = [];
+          const cq = [y*W+x];
+          outlineVisited[y*W+x] = 1;
+          while (cq.length) {
+            const ci = cq.pop();
+            cluster.push(ci);
+            for (const cn of [ci-W, ci+W, ci-1, ci+1]) {
+              if (cn >= 0 && cn < W*H && closedOutline[cn] && !outlineVisited[cn]) {
+                outlineVisited[cn] = 1; cq.push(cn);
+              }
+            }
+          }
+
+          if (cluster.length < 20) continue;
+
+          // Bereken bounding box van cluster
+          let minX = W, maxX = 0, minY = H, maxY = 0;
+          for (const ci of cluster) {
+            const cx = ci % W, cy = Math.floor(ci / W);
+            if (cx < minX) minX = cx; if (cx > maxX) maxX = cx;
+            if (cy < minY) minY = cy; if (cy > maxY) maxY = cy;
+          }
+
+          // Zoek een binnenpunt via scanline: loop horizontaal door de bounding box
+          // en tel omlijningskruisingen — oneven = binnen
+          let seedFound = false;
+          for (let sy = minY + 1; sy < maxY && !seedFound; sy++) {
+            let crossings = 0;
+            let lastWasOutline = false;
+            for (let sx = minX; sx <= maxX; sx++) {
+              const isOut = !!closedOutline[sy * W + sx];
+              if (isOut && !lastWasOutline) crossings++;
+              lastWasOutline = isOut;
+
+              // Oneven kruisingen = binnen de omlijning
+              if (!isOut && crossings % 2 === 1) {
+                const seed = sy * W + sx;
+                if (closedOutline[seed] || visited[seed] || mask[seed]) continue;
+
+                const innerQ = [seed];
+                const innerV = new Uint8Array(W * H);
+                innerV[seed] = 1;
+                let count = 0;
+                let leaks = false;
+
+                while (innerQ.length && count < 500000) {
+                  const ii = innerQ.pop();
+                  count++;
+                  const ix = ii % W, iy = Math.floor(ii / W);
+                  if (ix <= 1 || ix >= W-2 || iy <= 1 || iy >= H-2) { leaks = true; break; }
+                  for (const ni of [ii-W, ii+W, ii-1, ii+1]) {
+                    if (ni >= 0 && ni < W*H && !innerV[ni] && !closedOutline[ni]) {
+                      innerV[ni] = 1; innerQ.push(ni);
+                    }
+                  }
+                }
+
+                if (!leaks && count > 20) {
+                  for (let i = 0; i < W*H; i++) {
+                    if (innerV[i] && !mask[i]) { mask[i] = 1; total++; }
+                  }
+                  seedFound = true;
+                  break;
+                }
+
+                if (leaks && count > 200 && count / (W*H) < 0.4) {
+                  for (let i = 0; i < W*H; i++) {
+                    if (innerV[i] && !mask[i]) { mask[i] = 1; total++; }
+                  }
+                  seedFound = true;
+                  break;
+                }
+              }
+            }
+          }
+        }
       }
 
       resolve({ mask, W, H, total, outlineCount: outline.reduce((a,b)=>a+b,0) });
@@ -1613,12 +1731,24 @@ async function runRefComparison() {
     </div>
     ${rowsHTML || '<div style="font-size:12px;color:var(--text3);padding:8px">Voer eerst een analyse uit om te vergelijken.</div>'}
 
+    <div style="margin-top:16px">
+      <div style="font-size:11px;color:var(--text2);margin-bottom:8px;font-weight:500">GEDETECTEERDE REFERENTIEZONES</div>
+      <div style="position:relative;border-radius:10px;overflow:hidden;border:1px solid var(--border)">
+        <canvas id="refPreviewCanvas" style="width:100%;display:block"></canvas>
+        <div style="position:absolute;top:8px;left:8px;background:rgba(10,14,26,0.75);border:1px solid rgba(34,197,94,0.3);border-radius:6px;padding:3px 8px;font-size:11px;color:#86efac">
+          Groen = gedetecteerde waterzone
+        </div>
+      </div>
+    </div>
+
     <div style="margin-top:12px;padding:10px 12px;background:rgba(59,130,246,0.07);border:1px solid rgba(59,130,246,0.2);border-radius:8px;font-size:11px;color:var(--text2);line-height:1.6">
       <strong style="color:var(--text)">ℹ️ Hoe werkt de score?</strong><br>
       De overeenkomstscore vergelijkt het gedetecteerde waterpercentage van elke methode met het referentiepercentage. 
       Een verschil van 0% geeft 100 score, elk procent verschil trekt 2 punten af. 
       Score ≥80% = goede overeenkomst (groen), 50–79% = matig (geel), &lt;50% = slechte overeenkomst (rood).
     </div>`;
+
+  drawRefPreview(ref);
 }
 
 // Trigger vergelijking na elke scan automatisch
