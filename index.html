@@ -457,6 +457,7 @@ main { padding: 36px 0 60px; }
 <script>
 let uploadedDataURL = null;
 const activeMethods = new Set(['rgb','hsv','sam2','hsv-sam2']);
+const storedMasks = {}; // opslag van pixel-maskers per methode voor referentievergelijking
 
 const dropZone    = document.getElementById('dropZone');
 const fileInput   = document.getElementById('fileInput');
@@ -551,6 +552,8 @@ scanBtn.addEventListener('click', async () => {
     alpha:     parseInt(document.getElementById('alphaSlider').value) / 100
   };
 
+  // Reset maskeropslag bij nieuwe scan
+  Object.keys(storedMasks).forEach(k => delete storedMasks[k]);
   resultsArea.innerHTML = buildGrid(methods);
 
   // Run pixel methods and SAM2 in parallel
@@ -639,7 +642,8 @@ function buildGrid(methods) {
         <div class="card-footer">
           <div class="stat"><span class="stat-label">Waterdekking</span><span class="stat-value" id="coverage-hsv-sam2">—</span></div>
           <div class="stat"><span class="stat-label">Wateroppervlak</span><span class="stat-value" id="pixels-hsv-sam2">—</span></div>
-          <div class="stat"><span class="stat-label">${riskLabel}</span><span class="stat-value" id="risk-hsv-sam2">${refDataURL ? '—' : '—'}</span></div>
+          <div class="stat"><span class="stat-label">Overeenkomst</span><span class="stat-value" id="match-hsv-sam2">—</span></div>
+          <div class="stat"><span class="stat-label">Overdetectie</span><span class="stat-value" id="over-hsv-sam2">—</span></div>
         </div>
       </div>`;
     }
@@ -661,7 +665,8 @@ function buildGrid(methods) {
       <div class="card-footer">
         <div class="stat"><span class="stat-label">Waterdekking</span><span class="stat-value" id="coverage-${m}">—</span></div>
         <div class="stat"><span class="stat-label">Wateroppervlak</span><span class="stat-value" id="pixels-${m}">—</span></div>
-        <div class="stat"><span class="stat-label">${riskLabel}</span><span class="stat-value" id="risk-${m}">—</span></div>
+        <div class="stat"><span class="stat-label">Overeenkomst</span><span class="stat-value" id="match-${m}">—</span></div>
+        <div class="stat"><span class="stat-label">Overdetectie</span><span class="stat-value" id="over-${m}">—</span></div>
       </div>
     </div>`;
   });
@@ -2043,15 +2048,10 @@ function injectRefCard() {
     const dlBtn = document.getElementById('dl-ref');
     if (dlBtn) dlBtn.disabled = false;
 
-    // Update overeenkomstscores van al afgeronde methoden
+    // Update vergelijkingsstatistieken van al afgeronde methoden
     ['rgb','hsv','sam2','hsv-sam2'].forEach(m => {
-      const covEl = document.getElementById('coverage-'+m);
-      if (!covEl || covEl.textContent === '—') return;
-      const pct = parseFloat(covEl.textContent) || 0;
-      const diff = Math.abs(pct - refPct);
-      const score = Math.max(0, 100 - diff * 2);
-      const scoreColor = score >= 80 ? 'ok' : score >= 50 ? 'warn' : 'danger';
-      setEl('risk-'+m, score.toFixed(1)+'%', scoreColor);
+      const stored = storedMasks[m];
+      if (stored) updateComparisonStats(m, stored.mask, stored.W, stored.H);
     });
   };
   img.src = refDataURL;
@@ -2151,25 +2151,58 @@ function finishCard(method, maskArr, W, H) {
   if (ld) ld.remove();
   const dlBtn = document.getElementById('dl-'+method);
   if (dlBtn) dlBtn.disabled = false;
+
   const waterPx = maskArr.reduce((a,v) => a+v, 0);
   const pct = parseFloat((waterPx / (W*H) * 100).toFixed(2));
+
+  // Sla masker op voor referentievergelijking
+  storedMasks[method] = { mask: maskArr, W, H, waterPx };
+
   const setEl = (id, txt, cls) => { const el=document.getElementById(id); if(el){el.textContent=txt;if(cls)el.className='stat-value '+cls;} };
   setEl('coverage-'+method, pct.toFixed(2)+'%', riskClass(pct));
   setEl('pixels-'+method, (waterPx/1e6).toFixed(2)+' Mpx');
 
-  if (refDataURL && refMaskCache) {
-    // Toon overeenkomstscore t.o.v. referentie
-    const refPct = parseFloat((refMaskCache.total / (refMaskCache.W * refMaskCache.H) * 100).toFixed(2));
-    const diff = Math.abs(pct - refPct);
-    const score = Math.max(0, 100 - diff * 2);
-    const scoreColor = score >= 80 ? 'ok' : score >= 50 ? 'warn' : 'danger';
-    setEl('risk-'+method, score.toFixed(1)+'%', scoreColor);
-  } else {
-    // Geen referentie — toon geen risico
-    const riskEl = document.getElementById('risk-'+method);
-    if (riskEl) { riskEl.textContent = '—'; riskEl.className = 'stat-value'; }
-  }
+  updateComparisonStats(method, maskArr, W, H);
   triggerRefUpdate();
+}
+
+function updateComparisonStats(method, maskArr, W, H) {
+  const setEl = (id, txt, cls) => { const el=document.getElementById(id); if(el){el.textContent=txt;if(cls)el.className='stat-value '+cls;} };
+
+  if (!refDataURL || !refMaskCache) {
+    setEl('match-'+method, '—');
+    setEl('over-'+method, '—');
+    return;
+  }
+
+  const ref = refMaskCache;
+  const rW = ref.W, rH = ref.H;
+
+  let overlap = 0, methodOnly = 0, refOnly = 0;
+  const total = W * H;
+
+  for (let i = 0; i < total; i++) {
+    const mx = i % W, my = Math.floor(i / W);
+    const rx = Math.min(rW-1, Math.round(mx * rW / W));
+    const ry = Math.min(rH-1, Math.round(my * rH / H));
+    const inMethod = !!maskArr[i];
+    const inRef    = !!ref.mask[ry * rW + rx];
+    if (inMethod && inRef)  overlap++;
+    if (inMethod && !inRef) methodOnly++;
+    if (!inMethod && inRef) refOnly++;
+  }
+
+  const refTotal = overlap + refOnly;
+  // Overeenkomst: hoeveel % van de referentie werd gevonden (recall)
+  const matchPct = refTotal > 0 ? parseFloat((overlap / refTotal * 100).toFixed(2)) : 0;
+  // Overdetectie: hoeveel extra pixels t.o.v. referentie (als % van referentie)
+  const overPct  = refTotal > 0 ? parseFloat((methodOnly / refTotal * 100).toFixed(2)) : 0;
+
+  const matchCls = matchPct >= 70 ? 'ok' : matchPct >= 40 ? 'warn' : 'danger';
+  const overCls  = overPct  <= 30 ? 'ok' : overPct  <= 80 ? 'warn' : 'danger';
+
+  setEl('match-'+method, matchPct.toFixed(2)+'%', matchCls);
+  setEl('over-'+method,  (overPct > 0 ? '+' : '') + overPct.toFixed(2)+'%', overCls);
 }
 function blobToBase64(blob) {
   return new Promise(resolve => {
