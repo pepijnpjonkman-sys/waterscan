@@ -557,6 +557,9 @@ scanBtn.addEventListener('click', async () => {
   if (methods.includes('hsv-sam2')) promises.push(runHSVSAM2(params));
   await Promise.all(promises);
 
+  // Voeg referentiekaart toe als referentieafbeelding beschikbaar is
+  if (refDataURL && refMaskCache) injectRefCard();
+
   await getAIAnalysis(methods, params);
 
   scanBtn.disabled = false;
@@ -1420,6 +1423,10 @@ function loadRefImage(event) {
     document.getElementById('refFileName').textContent = file.name;
     document.getElementById('refClearBtn').style.display = '';
     runRefComparison();
+    // Voeg ook kaart toe als scan al gedaan is
+    if (document.getElementById('resultsArea').children.length > 0) {
+      setTimeout(injectRefCard, 500);
+    }
   };
   reader.readAsDataURL(file);
 }
@@ -1753,6 +1760,82 @@ async function runRefComparison() {
 
 // Trigger vergelijking na elke scan automatisch
 function triggerRefUpdate() { if (refDataURL) setTimeout(runRefComparison, 400); }
+
+// Voeg referentiekaart toe aan het resultatenraster
+function injectRefCard() {
+  const existing = document.getElementById('card-ref');
+  if (existing) existing.remove();
+
+  const ref = refMaskCache;
+  if (!ref) return;
+
+  const refPct = Math.round(ref.total / (ref.W * ref.H) * 100);
+
+  // Maak kaart HTML
+  const card = document.createElement('div');
+  card.className = 'result-card';
+  card.id = 'card-ref';
+  card.innerHTML = `
+    <div class="card-header">
+      <span class="card-method-badge" style="background:rgba(34,197,94,0.15);color:#86efac;border:1px solid rgba(34,197,94,0.3)">Referentie</span>
+      <span class="card-title">Handmatig ingetekende zones</span>
+      <button class="dl-btn" id="dl-ref" style="border-color:rgba(34,197,94,0.3);color:#86efac"
+        onclick="downloadRefCard()">⬇ PNG</button>
+    </div>
+    <div class="canvas-wrap" id="wrap-ref" style="position:relative">
+      <canvas id="canvas-ref"></canvas>
+    </div>
+    <div class="legend">
+      <span class="legend-item"><span class="legend-dot" style="background:#22c55e"></span>Referentie waterzone</span>
+      <span class="legend-item"><span class="legend-dot" style="background:rgba(255,255,255,0.12)"></span>Overig</span>
+    </div>
+    <div class="card-footer">
+      <div class="stat"><span class="stat-label">Waterdekking</span><span class="stat-value ${riskClass(refPct)}" id="coverage-ref">${refPct}%</span></div>
+      <div class="stat"><span class="stat-label">Wateroppervlak</span><span class="stat-value" id="pixels-ref">${(ref.total/1e6).toFixed(2)} Mpx</span></div>
+      <div class="stat"><span class="stat-label">Type</span><span class="stat-value" style="color:#86efac">Handmatig</span></div>
+    </div>`;
+
+  // Voeg toe aan het einde van het resultatenraster
+  const resultsArea = document.getElementById('resultsArea');
+  resultsArea.appendChild(card);
+
+  // Teken de overlay op het canvas
+  const canvas = document.getElementById('canvas-ref');
+  const img = new Image();
+  img.onload = () => {
+    canvas.width  = img.naturalWidth;
+    canvas.height = img.naturalHeight;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(img, 0, 0);
+    const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const d = imgData.data;
+    const { mask, W, H } = ref;
+    for (let i = 0; i < W * H; i++) {
+      const pi = i * 4;
+      if (mask[i]) {
+        d[pi]   = Math.round(d[pi]   * 0.28 + 34  * 0.72);
+        d[pi+1] = Math.round(d[pi+1] * 0.28 + 197 * 0.72);
+        d[pi+2] = Math.round(d[pi+2] * 0.28 + 94  * 0.72);
+      } else {
+        d[pi]   = Math.round(d[pi]   * 0.52);
+        d[pi+1] = Math.round(d[pi+1] * 0.52);
+        d[pi+2] = Math.round(d[pi+2] * 0.52);
+      }
+    }
+    ctx.putImageData(imgData, 0, 0);
+    document.getElementById('dl-ref').disabled = false;
+  };
+  img.src = refDataURL;
+}
+
+function downloadRefCard() {
+  const canvas = document.getElementById('canvas-ref');
+  if (!canvas) return;
+  const a = document.createElement('a');
+  a.download = 'waterscan_referentie.png';
+  a.href = canvas.toDataURL('image/png');
+  a.click();
+}
 
 function drawContour(ctx, maskPixels, W, H) {
   ctx.strokeStyle = '#f59e0b';
