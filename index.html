@@ -101,7 +101,7 @@ main { padding: 36px 0 60px; }
 .dl-btn-hsv-sam2:hover:not(:disabled) { border-color: rgba(245,158,11,0.5); color: #fcd34d; }
 .canvas-wrap { position: relative; width: 100%; aspect-ratio: 16/10; background: #060a14; overflow: hidden; }
 .canvas-wrap canvas, .canvas-wrap img { width: 100%; height: 100%; object-fit: contain; display: block; }
-.canvas-wrap.interactive { cursor: crosshair; }
+.canvas-wrap.interactive { cursor: crosshair; overflow: hidden; }
 .hsv-sam2-hint {
   position: absolute; bottom: 8px; left: 50%; transform: translateX(-50%);
   background: rgba(10,14,26,0.75); border: 1px solid rgba(245,158,11,0.35);
@@ -1190,6 +1190,15 @@ async function runHSVSAM2(params) {
   const ctx = dest.getContext('2d');
   ctx.drawImage(srcCanvas, 0, 0);
 
+  // Schaal canvas zodat het de wrap vult (CSS display grootte, niet interne resolutie)
+  const wrapEl2 = document.getElementById('wrap-hsv-sam2');
+  const wrapW = wrapEl2.clientWidth || 400;
+  const wrapH = wrapEl2.clientHeight || 300;
+  const fitScale = Math.min(wrapW / srcCanvas.width, wrapH / srcCanvas.height, 1);
+  dest.style.width  = Math.round(srcCanvas.width  * fitScale) + 'px';
+  dest.style.height = Math.round(srcCanvas.height * fitScale) + 'px';
+  dest.style.transformOrigin = '0 0';
+
   // Verberg loading overlay — kaart is direct bruikbaar
   const ld = document.getElementById('loading-hsv-sam2');
   if (ld) ld.style.display = 'none';
@@ -1211,6 +1220,8 @@ async function runHSVSAM2(params) {
     (e, nx, ny) => hsvSam2CanvasClickNative(e, nx, ny),
     (e, nx, ny) => hsvSam2RightClickNative(nx, ny)
   );
+  // Initiële centrering
+  setTimeout(() => hsvSam2ZoomCtrl && hsvSam2ZoomCtrl.reset(), 50);
 
   // Voeg reset-knop toe als nog niet aanwezig
   if (!document.getElementById('hsvSam2ZoomBtn')) {
@@ -1521,30 +1532,33 @@ function makeZoomable(wrapEl, canvasEl, onCanvasClick, onCanvasRightClick) {
   let isDragging = false, dragStartX = 0, dragStartY = 0, panStartX = 0, panStartY = 0;
   let lastTouchDist = null;
 
-  function applyTransform() {
-    canvasEl.style.transform = `translate(${panX}px, ${panY}px) scale(${zoom})`;
-  }
-
   function clampPan() {
     const wW = wrapEl.clientWidth, wH = wrapEl.clientHeight;
-    // Geschaalde canvas afmetingen
-    const cW = canvasEl.offsetWidth  * zoom;
-    const cH = canvasEl.offsetHeight * zoom;
+    // Geschaalde weergavegrootte van de canvas
+    const displayW = canvasEl.offsetWidth;
+    const displayH = canvasEl.offsetHeight;
+    const cW = displayW * zoom;
+    const cH = displayH * zoom;
 
+    // Horizontaal
     if (cW <= wW) {
-      // Canvas past in de breedte — centreer horizontaal
-      panX = (wW - cW) / 2;
+      panX = (wW - cW) / 2; // centreer
     } else {
-      // Canvas groter dan wrap — pan begrenzen zodat canvas altijd het scherm vult
+      // Zorg dat canvas de wrap vult: linkerkant niet verder dan 0, rechterkant niet verder dan wW
       panX = Math.min(0, Math.max(panX, wW - cW));
     }
 
+    // Verticaal
     if (cH <= wH) {
-      // Canvas past in de hoogte — centreer verticaal
-      panY = (wH - cH) / 2;
+      panY = (wH - cH) / 2; // centreer
     } else {
       panY = Math.min(0, Math.max(panY, wH - cH));
     }
+  }
+
+  function applyTransform() {
+    canvasEl.style.transformOrigin = '0 0';
+    canvasEl.style.transform = `translate(${panX}px, ${panY}px) scale(${zoom})`;
   }
 
   // Scroll = zoom naar muispositie
