@@ -567,7 +567,6 @@ scanBtn.addEventListener('click', async () => {
   // Voeg referentiekaart toe als referentieafbeelding beschikbaar is
   if (refDataURL && refMaskCache) injectRefCard();
 
-  await getAIAnalysis(methods, params);
 
   scanBtn.disabled = false;
   document.getElementById('scanLabel').textContent = 'Opnieuw analyseren';
@@ -642,8 +641,8 @@ function buildGrid(methods) {
         <div class="card-footer">
           <div class="stat"><span class="stat-label">Waterdekking</span><span class="stat-value" id="coverage-hsv-sam2">—</span></div>
           <div class="stat"><span class="stat-label">Wateroppervlak</span><span class="stat-value" id="pixels-hsv-sam2">—</span></div>
-          <div class="stat"><span class="stat-label">Overeenkomst</span><span class="stat-value" id="match-hsv-sam2">—</span></div>
-          <div class="stat"><span class="stat-label">Overdetectie</span><span class="stat-value" id="over-hsv-sam2">—</span></div>
+          <div class="stat"><span class="stat-label">Overeenkomst met referentie</span><span class="stat-value" id="match-hsv-sam2">—</span></div>
+          <div class="stat"><span class="stat-label">Overdetectie t.o.v. referentie</span><span class="stat-value" id="over-hsv-sam2">—</span></div>
         </div>
       </div>`;
     }
@@ -665,12 +664,12 @@ function buildGrid(methods) {
       <div class="card-footer">
         <div class="stat"><span class="stat-label">Waterdekking</span><span class="stat-value" id="coverage-${m}">—</span></div>
         <div class="stat"><span class="stat-label">Wateroppervlak</span><span class="stat-value" id="pixels-${m}">—</span></div>
-        <div class="stat"><span class="stat-label">Overeenkomst</span><span class="stat-value" id="match-${m}">—</span></div>
-        <div class="stat"><span class="stat-label">Overdetectie</span><span class="stat-value" id="over-${m}">—</span></div>
+        <div class="stat"><span class="stat-label">Overeenkomst met referentie</span><span class="stat-value" id="match-${m}">—</span></div>
+        <div class="stat"><span class="stat-label">Overdetectie t.o.v. referentie</span><span class="stat-value" id="over-${m}">—</span></div>
       </div>
     </div>`;
   });
-  return `<div class="results-grid">${orig}${refCard}${cards.join('')}</div><div id="aiPanel"></div>`;
+  return `<div class="results-grid">${orig}${refCard}${cards.join('')}</div>`;
 }
 
 function loadSrc() {
@@ -1156,7 +1155,13 @@ async function runSAM2_HF(params) {
   const setEl = (id,txt,cls) => { const el=document.getElementById(id); if(el){el.textContent=txt;if(cls)el.className='stat-value '+cls;} };
   setEl('coverage-sam2', pct.toFixed(2)+'%', riskClass(pct));
   setEl('pixels-sam2',   (waterPx/1e6).toFixed(2)+' Mpx');
-  setEl('risk-sam2',     riskLabel(pct), riskClass(pct));
+
+  // Sla masker op voor referentievergelijking
+  const sam2Mask = new Uint8Array(imgW * imgH);
+  for (let i = 0; i < maskData.length / 4; i++) sam2Mask[i] = maskData[i*4] > 128 ? 1 : 0;
+  storedMasks['sam2'] = { mask: sam2Mask, W: imgW, H: imgH, waterPx };
+  updateComparisonStats('sam2', sam2Mask, imgW, imgH);
+  triggerRefUpdate();
 }
 
 
@@ -1362,7 +1367,13 @@ async function hsvSam2CanvasClick(e) {
     const setEl = (id,txt,cls) => { const el=document.getElementById(id); if(el){el.textContent=txt;if(cls)el.className='stat-value '+cls;} };
     setEl('coverage-hsv-sam2', pct.toFixed(2)+'%', riskClass(pct));
     setEl('pixels-hsv-sam2', (waterPx/1e6).toFixed(2)+' Mpx');
-    setEl('risk-hsv-sam2', riskLabel(pct), riskClass(pct));
+
+    // Sla masker op voor referentievergelijking
+    const hsvMask = new Uint8Array(dest.width * dest.height);
+    for (let i = 0; i < maskPixels.length; i++) hsvMask[i] = maskPixels[i] > 128 ? 1 : 0;
+    storedMasks['hsv-sam2'] = { mask: hsvMask, W: dest.width, H: dest.height, waterPx };
+    updateComparisonStats('hsv-sam2', hsvMask, dest.width, dest.height);
+    triggerRefUpdate();
 
     const pos = hsvSam2Points.filter(p=>p.label===1).length;
     const neg = hsvSam2Points.filter(p=>p.label===0).length;
@@ -1486,7 +1497,11 @@ async function hsvSam2Recompute() {
     const setEl = (id,txt,cls) => { const el=document.getElementById(id); if(el){el.textContent=txt;if(cls)el.className='stat-value '+cls;} };
     setEl('coverage-hsv-sam2', pct.toFixed(2)+'%', riskClass(pct));
     setEl('pixels-hsv-sam2', (waterPx/1e6).toFixed(2)+' Mpx');
-    setEl('risk-hsv-sam2', riskLabel(pct), riskClass(pct));
+
+    const hsvMask2 = new Uint8Array(dest.width * dest.height);
+    for (let i = 0; i < maskPixels.length; i++) hsvMask2[i] = maskPixels[i] > 128 ? 1 : 0;
+    storedMasks['hsv-sam2'] = { mask: hsvMask2, W: dest.width, H: dest.height, waterPx };
+    updateComparisonStats('hsv-sam2', hsvMask2, dest.width, dest.height);
 
     const pos = hsvSam2Points.filter(p=>p.label===1).length;
     const neg = hsvSam2Points.filter(p=>p.label===0).length;
@@ -1987,14 +2002,26 @@ async function runRefComparison() {
 
   // Render vergelijkingspaneel
   const rowsHTML = rows.map(r => `
-    <div style="display:flex;align-items:center;gap:12px;padding:8px 0;border-bottom:1px solid var(--border)">
-      <span style="width:8px;height:8px;border-radius:50%;background:${r.color};display:inline-block;flex-shrink:0"></span>
-      <span style="flex:1;font-size:13px;color:var(--text)">${r.label}</span>
-      <span style="font-size:13px;color:var(--text2);min-width:50px;text-align:right">${r.pct}%</span>
-      <div style="width:120px;background:var(--bg3);border-radius:4px;height:6px;overflow:hidden">
-        <div style="width:${r.score}%;height:100%;background:${r.scoreColor};border-radius:4px;transition:width 0.4s"></div>
+    <div style="display:grid;grid-template-columns:140px 1fr 1fr 1fr;gap:8px;align-items:center;padding:8px 0;border-bottom:1px solid var(--border)">
+      <div style="display:flex;align-items:center;gap:6px">
+        <span style="width:8px;height:8px;border-radius:50%;background:${r.color};display:inline-block;flex-shrink:0"></span>
+        <span style="font-size:13px;color:var(--text);font-weight:500">${r.label}</span>
       </div>
-      <span style="font-size:12px;font-weight:600;color:${r.scoreColor};min-width:36px;text-align:right">${r.score}%</span>
+      <div style="text-align:right">
+        <div style="font-size:11px;color:var(--text3);margin-bottom:2px">Gedetecteerd</div>
+        <div style="font-size:13px;color:var(--text2)">${r.pct}%</div>
+        <div style="font-size:10px;color:var(--text3)">van het beeld</div>
+      </div>
+      <div style="text-align:right">
+        <div style="font-size:11px;color:var(--text3);margin-bottom:2px">Overeenkomst</div>
+        <div style="font-size:13px;font-weight:600;color:${r.scoreColor}">${r.score.toFixed(1)}%</div>
+        <div style="font-size:10px;color:var(--text3)">van referentie gevonden</div>
+      </div>
+      <div>
+        <div style="width:100%;background:var(--bg3);border-radius:4px;height:6px;overflow:hidden;margin-top:10px">
+          <div style="width:${r.score}%;height:100%;background:${r.scoreColor};border-radius:4px;transition:width 0.4s"></div>
+        </div>
+      </div>
     </div>`).join('');
 
   const bestMatch = rows[0];
@@ -2022,8 +2049,11 @@ async function runRefComparison() {
       </div>
     </div>
 
-    <div style="font-size:11px;color:var(--text2);margin-bottom:8px;font-weight:500">
-      METHODE · GEDETECTEERD · OVEREENKOMSTSCORE
+    <div style="display:grid;grid-template-columns:140px 1fr 1fr 1fr;gap:8px;font-size:10px;font-weight:600;color:var(--text3);letter-spacing:0.5px;margin-bottom:4px;padding:0 0 4px;border-bottom:1px solid var(--border)">
+      <div>METHODE</div>
+      <div style="text-align:right">GEDETECTEERD<br><span style="font-weight:400;opacity:0.7">% van het beeld</span></div>
+      <div style="text-align:right">OVEREENKOMST<br><span style="font-weight:400;opacity:0.7">% referentie gevonden</span></div>
+      <div></div>
     </div>
     ${rowsHTML || '<div style="font-size:12px;color:var(--text3);padding:8px">Voer eerst een analyse uit om te vergelijken.</div>'}
 
@@ -2037,11 +2067,11 @@ async function runRefComparison() {
       </div>
     </div>
 
-    <div style="margin-top:12px;padding:10px 12px;background:rgba(59,130,246,0.07);border:1px solid rgba(59,130,246,0.2);border-radius:8px;font-size:11px;color:var(--text2);line-height:1.6">
-      <strong style="color:var(--text)">ℹ️ Hoe werkt de score?</strong><br>
-      De overeenkomstscore vergelijkt het gedetecteerde waterpercentage van elke methode met het referentiepercentage. 
-      Een verschil van 0% geeft 100 score, elk procent verschil trekt 2 punten af. 
-      Score ≥80% = goede overeenkomst (groen), 50–79% = matig (geel), &lt;50% = slechte overeenkomst (rood).
+    <div style="margin-top:12px;padding:10px 12px;background:rgba(59,130,246,0.07);border:1px solid rgba(59,130,246,0.2);border-radius:8px;font-size:11px;color:var(--text2);line-height:1.8">
+      <strong style="color:var(--text)">Uitleg van de kolommen</strong><br>
+      <strong style="color:var(--text)">Gedetecteerd</strong> — hoeveel procent van het totale beeld de methode als water markeert.<br>
+      <strong style="color:var(--text)">Overeenkomst</strong> — hoeveel procent van jouw handmatig ingetekende waterpixels de methode ook daadwerkelijk heeft gevonden (100% = alles gevonden, 0% = niets gevonden).<br>
+      <em>Hoge overeenkomst + lage detectie = methode vindt precies de juiste plekken. Hoge detectie + lage overeenkomst = methode detecteert te veel.</em>
     </div>`;
 
   drawRefPreview(ref);
@@ -2333,6 +2363,7 @@ async function runMethod(method, params) {
   const [cr,cg,cb] = COLORS[method];
   const oa = params.alpha;
   let waterPx = 0;
+  const maskArr = new Uint8Array(canvas.width * canvas.height);
 
   for (let i=0; i<src.length; i+=4) {
     const r=src[i], g=src[i+1], b=src[i+2];
@@ -2343,6 +2374,7 @@ async function runMethod(method, params) {
     else if (method==='hsv')  isW = waterHSV(r,g,b,params);
     else if (method==='sam2') isW = waterSAM2(r,g,b,ix,iy,canvas.width,canvas.height,params);
 
+    maskArr[i/4] = isW ? 1 : 0;
     if (isW) {
       d[i]   = Math.round(r*(1-oa)+cr*oa);
       d[i+1] = Math.round(g*(1-oa)+cg*oa);
@@ -2368,13 +2400,19 @@ async function runMethod(method, params) {
   const pct = parseFloat((waterPx/total*100).toFixed(2));
   const mpx = (waterPx/1e6).toFixed(2);
 
+  // Sla masker op voor referentievergelijking
+  storedMasks[method] = { mask: maskArr, W: canvas.width, H: canvas.height, waterPx };
+
   const setEl = (id, txt, cls) => {
     const el = document.getElementById(id);
     if (el) { el.textContent = txt; if (cls) el.className = 'stat-value '+cls; }
   };
   setEl('coverage-'+method, pct.toFixed(2)+'%', riskClass(pct));
   setEl('pixels-'+method,   mpx+' Mpx');
-  setEl('risk-'+method,     riskLabel(pct), riskClass(pct));
+
+  // Vergelijk met referentie als beschikbaar
+  updateComparisonStats(method, maskArr, canvas.width, canvas.height);
+  triggerRefUpdate();
 }
 
 function downloadResult(method) {
@@ -2602,7 +2640,7 @@ Geef een technische analyse in het Nederlands (max 250 woorden) met deze onderde
           <div class="guide-step-num">4</div>
           <div class="guide-step-body">
             <strong>Analyseer klikken</strong>
-            <span>Klik op <em>Analyseer</em>. Elke methode verwerkt de afbeelding parallel en toont het resultaat zodra het klaar is. Onderaan verschijnt een Claude Vision analyse die de methoden vergelijkt.</span>
+            <span>Klik op <em>Analyseer</em>. Elke methode verwerkt de afbeelding parallel en toont het resultaat zodra het klaar is. De resultaten worden direct weergegeven per methode.</span>
           </div>
         </div>
         <div class="guide-step">
@@ -2960,10 +2998,7 @@ Geef een technische analyse in het Nederlands (max 250 woorden) met deze onderde
           <strong>Opnieuw analyseren na aanpassing</strong>
           Pas je klikpunten of parameters aan en klik opnieuw op <em>Analyseer</em> — alle actieve methoden worden opnieuw uitgevoerd met de nieuwe instellingen. De vorige resultaten worden overschreven.
         </div>
-        <div class="tip-box info">
-          <strong>Claude Vision analyse</strong>
-          Onderaan de resultaten verschijnt een tekstuele analyse van Claude Vision. Deze vergelijkt de gebruikte methoden, beschrijft het watertype en geeft een risicobeoordeling. De analyse wordt ook per run vernieuwd bij <em>Opnieuw analyseren</em>.
-        </div>
+
       </div>
 
       <!-- ── Onnauwkeurigheden ─────────────────────────────────────────── -->
