@@ -1986,19 +1986,19 @@ async function runRefComparison() {
     { id: 'hsv-sam2',label: 'Segmenteren n.a.v. punten',color: '#f59e0b' },
   ];
 
+  // Gebruik de pixel-nauwkeurige overeenkomstwaarden die al in de kaarten staan
   const results = methods.map(m => {
-    const covEl = document.getElementById('coverage-' + m.id);
-    const pct = covEl && covEl.textContent !== '—' ? parseInt(covEl.textContent) || null : null;
-    return { ...m, pct };
-  }).filter(m => m.pct !== null);
+    const covEl   = document.getElementById('coverage-' + m.id);
+    const matchEl = document.getElementById('match-' + m.id);
+    const pct     = covEl   && covEl.textContent   !== '—' ? parseFloat(covEl.textContent)   || null : null;
+    const matchPct= matchEl && matchEl.textContent !== '—' ? parseFloat(matchEl.textContent) || null : null;
+    return { ...m, pct, score: matchPct };
+  }).filter(m => m.score !== null);
 
-  // Bereken overeenkomst: verschil in percentage
-  const rows = results.map(m => {
-    const diff = Math.abs(m.pct - refPct);
-    const score = Math.max(0, 100 - diff * 2);
-    const scoreColor = score >= 80 ? '#86efac' : score >= 50 ? '#fcd34d' : '#fca5a5';
-    return { ...m, diff, score, scoreColor };
-  }).sort((a,b) => b.score - a.score);
+  const rows = results.slice().sort((a,b) => b.score - a.score);
+  rows.forEach(r => {
+    r.scoreColor = r.score >= 70 ? '#86efac' : r.score >= 40 ? '#fcd34d' : '#fca5a5';
+  });
 
   // Render vergelijkingspaneel
   const rowsHTML = rows.map(r => `
