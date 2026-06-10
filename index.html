@@ -721,9 +721,18 @@ function updateSamplerStatus() {
   const el = document.getElementById('samplerStatus');
   const clrBtn = document.getElementById('clearSamplerBtn');
   if (!el) return;
+
+  // Lees actuele margewaarden
+  const hm = document.getElementById('hMarge')?.value || 10;
+  const sm = document.getElementById('sMarge')?.value || 30;
+  const vm = document.getElementById('vMarge')?.value || 30;
+
   if (sampledHSVRange) {
     const r = sampledHSVRange;
-    el.textContent = `✓ ${samplerSamples.length} punt${samplerSamples.length!==1?'en':''} geselecteerd — H:${r.hLo}–${r.hHi} S:${r.sLo}–${r.sHi} V:${r.vLo}–${r.vHi}`;
+    el.innerHTML =
+      `✓ ${samplerSamples.length} punt${samplerSamples.length!==1?'en':''} geselecteerd &nbsp;·&nbsp; ` +
+      `<span style="opacity:0.8">H:${r.hLo}–${r.hHi} &nbsp;S:${r.sLo}–${r.sHi} &nbsp;V:${r.vLo}–${r.vHi}</span>` +
+      `<br><span style="font-size:10px;opacity:0.6">Marge: H ±${hm} &nbsp; S ±${sm} &nbsp; V ±${vm} &nbsp;(aanpasbaar in sampler)</span>`;
     el.style.color = '#86efac';
     if (clrBtn) clrBtn.style.display = '';
   } else {
@@ -731,7 +740,7 @@ function updateSamplerStatus() {
     el.style.color = '';
     if (clrBtn) clrBtn.style.display = 'none';
   }
-  updateHSVSAM2Callout(); // keep HSV-SAM2 status in sync
+  updateHSVSAM2Callout();
 }
 
 function clearSamples() {
@@ -803,6 +812,7 @@ function openSampler() {
       const v = document.getElementById(id).value;
       document.getElementById(id+'Val').textContent = v;
       recalcHSVRange();
+      updateSamplerStatus(); // update marge-weergave in de balk
     };
   });
 
@@ -958,8 +968,8 @@ function recalcHSVRange() {
   const vLo = Math.max(0,   Math.min(...vs) - vm);
   const vHi = Math.min(255, Math.max(...vs) + vm);
 
-  // RGB range (0-255, used by RGB method) — margins scaled to 0-255 space
-  const rmRGB = Math.round(vm * 0.85); // reuse vm as RGB margin (same perceptual scale)
+  // RGB range (0-255, used by RGB method) — marge gelijk aan V-marge
+  const rmRGB = vm;
   const rLo = Math.max(0,   Math.min(...rs) - rmRGB);
   const rHi = Math.min(255, Math.max(...rs) + rmRGB);
   const gLo = Math.max(0,   Math.min(...gs) - rmRGB);
